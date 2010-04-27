@@ -18,8 +18,8 @@ import System.IO
 import Text.Parsec hiding ((<|>), many, optional)
 import Text.Parsec.String
 
-import GMenu.Pick
-import GMenu.Util
+import GSMenu.Pick
+import GSMenu.Util
 
 data AppConfig = AppConfig {
       cfg_complex   :: Bool
@@ -67,7 +67,7 @@ usageStr = do
 optVersion :: OptDescr (AppConfig -> IO AppConfig)
 optVersion = Option ['v'] ["version"]
              (NoArg $ \_ -> do 
-                hPutStrLn stderr ("gmenu " ++ versionString ++ ".")
+                hPutStrLn stderr ("gsmenu " ++ versionString ++ ".")
                 hPutStrLn stderr "Copyright (C) Troels Henriksen."
                 exitSuccess)
              "Print version number."
