@@ -137,10 +137,11 @@ select elm = elm { el_data = return $ Just $ el_data elm }
 
 diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
 -- FIXME remove nub
-diamondLayer n = let ul = [ (x,n-x) | x <- [0..n] ]
-        in nub $ ul ++ (map (negate *** id) ul) ++
-           (map (negate *** negate) ul) ++
-           (map (id *** negate) ul)
+diamondLayer n = 
+  nub $ ul ++ (map (negate *** id) ul) ++
+              (map (negate *** negate) ul) ++
+              (map (id *** negate) ul)
+    where ul = [ (x,n-x) | x <- [0..n] ]
 
 diamond :: (Enum a, Num a) => [(a, a)]
 diamond = concatMap diamondLayer [0..]
@@ -357,7 +358,7 @@ handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
             maybe eventLoop (return . Just) =<< el_data elm
     | otherwise = eventLoop
 
-handle _ (ExposeEvent { }) = redrawAllElements >> eventLoop
+handle _ e@(ExposeEvent { ev_count = 0 }) = redrawAllElements >> eventLoop
 
 handle _ _ = eventLoop
 
