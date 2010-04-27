@@ -358,7 +358,7 @@ handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
             maybe eventLoop (return . Just) =<< el_data elm
     | otherwise = eventLoop
 
-handle _ e@(ExposeEvent { ev_count = 0 }) = redrawAllElements >> eventLoop
+handle _ (ExposeEvent { ev_count = 0 }) = redrawAllElements >> eventLoop
 
 handle _ _ = eventLoop
 
