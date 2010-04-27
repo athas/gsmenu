@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------------
 -- |
--- Module      :  GPick.Font
+-- Module      :  GMenu.Font
 -- Copyright   :  (c) 2007 Andrea Rossato and Spencer Janssen
 -- License     :  BSD-style (see xmonad/LICENSE)
 --
@@ -13,10 +13,10 @@
 --
 -----------------------------------------------------------------------------
 
-module GPick.Font
+module GMenu.Font
     ( -- * Usage:
       -- $usage
-      GPickFont(..)
+      GMenuFont(..)
     , initColor
     , initXMF
     , releaseXMF
@@ -51,11 +51,11 @@ import Graphics.X11.Xlib.Extras
 
 import Codec.Binary.UTF8.String (encodeString, decodeString)
 
-import GPick.Util
+import GMenu.Util
 
 
 -- Hide the Core Font/Xft switching here
-data GPickFont = Core FontStruct
+data GMenuFont = Core FontStruct
                | Utf8 FontSet
 #ifdef XFT
                | Xft  XftFont
@@ -101,7 +101,7 @@ releaseUtf8Font dpy fs = do
 
 -- | When initXMF gets a font name that starts with 'xft:' it switches to the Xft backend
 -- Example: 'xft: Sans-10'
-initXMF :: MonadIO m => Display -> String -> m GPickFont
+initXMF :: MonadIO m => Display -> String -> m GMenuFont
 initXMF dpy s =
 #ifdef XFT
   if xftPrefix `isPrefixOf` s then
@@ -114,7 +114,7 @@ initXMF dpy s =
   where xftPrefix = "xft:"
 #endif
 
-releaseXMF :: MonadIO m => Display -> GPickFont -> m ()
+releaseXMF :: MonadIO m => Display -> GMenuFont -> m ()
 #ifdef XFT
 releaseXMF dpy (Xft xftfont) = do
   io $ xftFontClose dpy xftfont
@@ -123,7 +123,7 @@ releaseXMF dpy (Utf8 fs) = releaseUtf8Font dpy fs
 releaseXMF dpy (Core fs) = releaseCoreFont dpy fs
 
 
-textWidthXMF :: MonadIO m => Display -> GPickFont -> String -> m Int
+textWidthXMF :: MonadIO m => Display -> GMenuFont -> String -> m Int
 textWidthXMF _   (Utf8 fs) s = return $ fi $ wcTextEscapement fs s
 textWidthXMF _   (Core fs) s = return $ fi $ textWidth fs s
 #ifdef XFT
@@ -132,7 +132,7 @@ textWidthXMF dpy (Xft xftdraw) s = liftIO $ do
     return $ xglyphinfo_xOff gi
 #endif
 
-textExtentsXMF :: MonadIO m => GPickFont -> String -> m (Int32,Int32)
+textExtentsXMF :: MonadIO m => GMenuFont -> String -> m (Int32,Int32)
 textExtentsXMF (Utf8 fs) s = do
   let (_,rl)  = wcTextExtents fs s
       ascent  = fi $ - (rect_y rl)
@@ -154,7 +154,7 @@ data Align = AlignCenter | AlignRight | AlignLeft | AlignRightOffset Int
 
 -- | Return the string x and y 'Position' in a 'Rectangle', given a
 -- 'FontStruct' and the 'Align'ment
-stringPosition :: (Functor m, MonadIO m) => Display -> GPickFont -> Rectangle -> Align -> String -> m (Position,Position)
+stringPosition :: (Functor m, MonadIO m) => Display -> GMenuFont -> Rectangle -> Align -> String -> m (Position,Position)
 stringPosition dpy fs (Rectangle _ _ w h) al s = do
   width <- textWidthXMF dpy fs s
   (a,d) <- textExtentsXMF fs s
@@ -167,7 +167,7 @@ stringPosition dpy fs (Rectangle _ _ w h) al s = do
   return (x,y)
 
 printStringXMF :: (Functor m, MonadIO m) => Display -> Drawable
-               -> GPickFont -> GC -> String -> String
+               -> GMenuFont -> GC -> String -> String
                -> Position -> Position -> String  -> m ()
 printStringXMF d p (Core fs) gc fc bc x y s = io $ do
     setFont d gc $ fontFromFontStruct fs

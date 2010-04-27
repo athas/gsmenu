@@ -1,4 +1,4 @@
-module GPick.Util
+module GMenu.Util
     ( io
     , fi
     , err

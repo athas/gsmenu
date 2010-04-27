@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, GeneralizedNewtypeDeriving, TypeSynonymInstances, FlexibleInstances, OverlappingInstances #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  GPick.Pick
+-- Module      :  GMenu.Pick
 -- Author      :  Troels Henriksen <athas@sigkill.dk>
 -- License     :  BSD-style (see LICENSE)
 --
@@ -10,7 +10,7 @@
 --
 -----------------------------------------------------------------------------
 
-module GPick.Pick
+module GMenu.Pick
     ( GPConfig(..)
     , Element(..)
     , defaultGPConfig
@@ -33,8 +33,8 @@ import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xshape
 
-import GPick.Font
-import GPick.Util
+import GMenu.Font
+import GMenu.Util
 
 import System.IO
 
@@ -80,7 +80,7 @@ data TextPane a = TextPane {
     , tp_bggc      :: GC
     , tp_fcolors   :: TwoDElementMap a -> (String, String)
     , tp_fieldgc   :: GC
-    , tp_font      :: GPickFont
+    , tp_font      :: GMenuFont
     , tp_lowerleft :: (Position, Position)
     , tp_width     :: Dimension
     }
@@ -99,7 +99,7 @@ data TwoDConf a = TwoDConf {
     , td_gpconfig  :: GPConfig a
     , td_display   :: Display
     , td_screen    :: Screen
-    , td_font      :: GPickFont
+    , td_font      :: GMenuFont
     , td_elms      :: [Element a]
     }
 
@@ -170,7 +170,7 @@ shrinkWhile sh p x = sw $ sh x
                             then sw ns
                             else return n
 
-drawWinBox :: Display -> Window -> GPickFont -> String
+drawWinBox :: Display -> Window -> GMenuFont -> String
            -> (String, String) -> String -> Dimension
            -> Position -> Position -> Dimension -> Dimension
            -> TwoD a ()
