@@ -277,7 +277,7 @@ redrawElements elementmap = do
                           | otherwise = colors
   updatingBoxes update elementmap
 
-updateTextInput :: (TextBuffer -> TextBuffer) -> TwoD a String
+updateTextInput :: (TextBuffer -> TextBuffer) -> TwoD a ()
 updateTextInput f = do
   old      <- gets td_tbuffer
   dispelms <- gets td_elementmap
@@ -304,30 +304,14 @@ updateTextInput f = do
           setForeground dpy fgc =<< stringToPixel dpy bg
           fillRectangle dpy win fgc margin 0 50 h
   printStringXMF dpy win font fgc fg bg margin (fi a) new
-  return new
     where mh = 1
           margin = 20
 
 input :: String -> TwoD a ()
-input str = do
-  buf  <- updateTextInput (++str)
-  let rm s = (s { td_elementmap = oks s } , ())
-      oks  = filter (isInfixOf buf . el_disp . snd)
-             . td_elementmap
-  changingState rm
+input = updateTextInput . flip (++)
 
 backspace :: TwoD a ()
-backspace = do
-  buf  <- updateTextInput (\s -> take (length s - 1) s)
-  elms <- asks td_elms
-  let rm s =
-        (s { td_elementmap =
-             [ ((0,0), select elm') |
-               elm' <- elms
-             , ok elm' ] }
-        , ())
-      ok    = isInfixOf buf . downcase . el_disp
-  changingState rm
+backspace = updateTextInput (\s -> take (length s - 1) s)
 
 eventLoop :: TwoD a (Maybe a)
 eventLoop = do
