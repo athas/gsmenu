@@ -36,6 +36,8 @@ defaultConfig = AppConfig {
 
 main :: IO ()
 main = do
+  io $ withFile "/home/athas/gpickout" AppendMode $ \h -> do
+         hPutStrLn h "starting"
   opts  <- getOpt RequireOrder options <$> getArgs
   dstr  <- getEnv "DISPLAY" `catch` (const $ return "")
   let cfg = defaultConfig { cfg_display = dstr }

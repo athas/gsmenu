@@ -2,9 +2,13 @@ module GPick.Util
     ( io
     , fi
     , err
+    , upcase
+    , downcase
     ) where
 
 import Control.Monad.Trans
+
+import Data.Char
 
 import System.IO
 
@@ -19,3 +23,11 @@ fi = fromIntegral
 -- | Short-hand for 'liftIO . hPutStrLn stderr'
 err :: MonadIO m => String -> m ()
 err = io . hPutStrLn stderr
+
+-- | Short-hand for 'map toUpper'
+upcase :: String -> String
+upcase = map toUpper
+
+-- | Short-hand for 'map toLower'
+downcase :: String -> String
+downcase = map toLower

@@ -56,9 +56,9 @@ import GPick.Util
 
 -- Hide the Core Font/Xft switching here
 data GPickFont = Core FontStruct
-                  | Utf8 FontSet
+               | Utf8 FontSet
 #ifdef XFT
-                  | Xft  XftFont
+               | Xft  XftFont
 #endif
 
 -- | Get the 'Pixel' value for a named color
