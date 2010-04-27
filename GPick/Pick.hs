@@ -279,8 +279,6 @@ redrawElements elementmap = do
 
 updateTextInput :: (TextBuffer -> TextBuffer) -> TwoD a ()
 updateTextInput f = do
-  old      <- gets td_tbuffer
-  dispelms <- gets td_elementmap
   allelms  <- asks td_elms
   dpy      <- asks td_display
   TextPane { tp_bggc = bggc, tp_win = win, tp_font = font 
@@ -288,11 +286,8 @@ updateTextInput f = do
            , tp_fcolors = fcolors }
       <- asks td_textpane
   new <- downcase <$> f <$> gets td_tbuffer
-  let candidates
-        | old `isPrefixOf` new = map snd dispelms
-        | otherwise            = map select allelms
-      oks  = const $ filter (isInfixOf new . el_disp) candidates
-  changingState $ \s -> (s { td_elementmap = zip (repeat (0,0)) (oks s)
+  let oks = map select $ filter (isInfixOf new . el_disp) $ allelms
+  changingState $ \s -> (s { td_elementmap = zip (repeat (0,0)) oks
                            , td_tbuffer = new }
                         , ())
   newdispelms <- gets td_elementmap
