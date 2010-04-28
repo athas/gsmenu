@@ -112,7 +112,7 @@ runWithCfg cfg = do
   rect  <- findRectangle dpy (rootWindowOfScreen screen)
   sel   <- gpick dpy screen rect defaultGPConfig elems
   case sel of
-    Nothing -> exitFailure
+    Nothing -> exitWith $ ExitFailure 2
     Just el -> putStr el >> exitSuccess
     where reader
            | cfg_complex cfg = readElementsC "stdin"
@@ -174,9 +174,9 @@ blankElem = Element {
 element :: GenParser Char u (Element a)
 element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
              foldM procKv blankElem kvs
-    where procKv elm ("disp", [val]) =
+    where procKv elm ("name", [val]) =
             return elm { el_disp = val }
-          procKv _   ("disp", _) = badval "disp"
+          procKv _   ("name", _) = badval "name"
           procKv elm ("fg", [val]) =
             return elm {
               el_colors = (val, snd $ el_colors elm) }
