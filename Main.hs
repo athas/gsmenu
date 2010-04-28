@@ -19,6 +19,7 @@ import Control.Monad.Trans
 
 import Data.Maybe
 import Data.List
+import Data.Word (Word8)
 
 import Graphics.X11.Xlib hiding (refreshKeyboardMapping)
 import Graphics.X11.Xinerama
@@ -30,6 +31,8 @@ import System.IO
 
 import Text.Parsec hiding ((<|>), many, optional)
 import Text.Parsec.String
+
+import Text.Printf
 
 import GSMenu.Config
 import GSMenu.Pick
@@ -171,10 +174,26 @@ blankElem = Element {
             , el_tags   = []
             }
 
+tagColors :: [String] -> (String, String)
+tagColors ts =
+  let seed x = toInteger (sum $ map ((*x).fromEnum) s) :: Integer
+      (r,g,b) = hsv2rgb ((seed 83) `mod` 360,
+                         (fromInteger ((seed 191) `mod` 1000))/2500+0.4,
+                         (fromInteger ((seed 121) `mod` 1000))/2500+0.4)
+  in ("white", "#" ++ concat (map (twodigitHex.(round :: Double -> Word8).(*256)) [r, g, b] ))
+    where s = show ts
+
+twodigitHex :: Word8 -> String
+twodigitHex a = printf "%02x" a
+
 element :: GenParser Char u (Element a)
 element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
-             foldM procKv blankElem kvs
-    where procKv elm ("name", [val]) =
+             let (fg, bg) = tagColors $ tags kvs
+             foldM procKv blankElem { el_colors = (fg, bg) } kvs
+    where tags (("tags",ts):ls) = ts ++ tags ls
+          tags ((_,_):ls)       = tags ls
+          tags []               = []
+          procKv elm ("name", [val]) =
             return elm { el_disp = val }
           procKv _   ("name", _) = badval "name"
           procKv elm ("fg", [val]) =

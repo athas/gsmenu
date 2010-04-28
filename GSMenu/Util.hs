@@ -17,6 +17,7 @@ module GSMenu.Util
     , err
     , upcase
     , downcase
+    , hsv2rgb
     ) where
 
 import Control.Monad.Trans
@@ -44,3 +45,20 @@ upcase = map toUpper
 -- | Short-hand for 'map toLower'
 downcase :: String -> String
 downcase = map toLower
+
+-- | Conversion scheme as in http://en.wikipedia.org/wiki/HSV_color_space
+hsv2rgb :: Fractional a => (Integer,a,a) -> (a,a,a)
+hsv2rgb (h,s,v) =
+    let hi = (div h 60) `mod` 6 :: Integer
+        f = (((fromInteger h)/60) - (fromInteger hi)) :: Fractional a => a
+        q = v * (1-f)
+        p = v * (1-s)
+        t = v * (1-(1-f)*s)
+    in case hi of
+         0 -> (v,t,p)
+         1 -> (q,v,p)
+         2 -> (p,v,t)
+         3 -> (p,q,v)
+         4 -> (t,p,v)
+         5 -> (v,p,q)
+         _ -> error "The world is ending. x mod a >= a."
