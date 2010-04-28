@@ -94,10 +94,11 @@ data Filter = Include String
             | Running String
 
 passes :: Filter -> Element a -> Bool
-passes (Include s) =
-  isInfixOf s . downcase . el_disp
-passes (Exclude s) = not . passes (Include s)
-passes (Running s) = passes (Include s)
+passes (Include s) elm =
+  any (isInfixOf $ downcase s) strs
+    where fields = map downcase (el_disp elm : el_tags elm)
+passes (Exclude s) elm = not $ passes (Include s) elm
+passes (Running s) elm = passes (Include s) elm
 
 apply :: Filter -> [Element a] -> [Element a]
 apply f = filter $ passes f
