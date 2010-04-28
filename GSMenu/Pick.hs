@@ -15,10 +15,14 @@
 module GSMenu.Pick
     ( GPConfig(..)
     , Element(..)
-    , defaultGPConfig
     , KeyMap
     , TwoDPosition
     , gpick
+      
+    , move
+    , backspace
+    , include
+    , exclude
     ) where
 
 import Data.Maybe
@@ -397,6 +401,20 @@ exclude = solidify Exclude
 include :: TwoD a ()
 include = solidify Include
 
+
+move :: (Integer, Integer) -> TwoD a ()
+move (dx, dy) = do
+  state <- get
+  elmap <- elementMap
+  let (ox, oy) = td_curpos state
+      newPos   = (ox+dx, oy+dy)
+      newSelectedEl = findInElementMap newPos elmap
+  when (isJust newSelectedEl) $ do
+    put state { td_curpos =  newPos }
+    redrawElements
+      (catMaybes [ findInElementMap (ox, oy) elmap
+                 , newSelectedEl])
+
 eventLoop :: TwoD a (Maybe a)
 eventLoop = do
   dpy <- asks td_display
@@ -587,44 +605,3 @@ gpick dpy screen rect gpconfig ellist = do
   freeTextPane dpy tp
   releaseXMF dpy font
   return selectedElement
-
-move :: (Integer, Integer) -> TwoD a ()
-move (dx, dy) = do
-  state <- get
-  elmap <- elementMap
-  let (ox, oy) = td_curpos state
-      newPos   = (ox+dx, oy+dy)
-      newSelectedEl = findInElementMap newPos elmap
-  when (isJust newSelectedEl) $ do
-    put state { td_curpos =  newPos }
-    redrawElements
-      (catMaybes [ findInElementMap (ox, oy) elmap
-                 , newSelectedEl])
-
-defaultGPConfig :: GPConfig a
-defaultGPConfig = GPConfig {
-                    gp_bordercolor = "white"
-                  , gp_cellheight = 50
-                  , gp_cellwidth = 130
-                  , gp_cellpadding = 10
-                  , gp_font = "xft:Sans-8"
-                  , gp_inputfont = "xft:Monospace-14"
-                  , gp_keymap = defaultGPNav
-                  , gp_originFractX = 1/2
-                  , gp_originFractY = 1/2
-                  }
-
-defaultGPNav :: KeyMap a
-defaultGPNav = M.fromList
-    [ ((0,xK_Left)           ,move (-1,0))
-    , ((controlMask,xK_b)    ,move (-1,0))
-    , ((0,xK_Right)          ,move (1,0))
-    , ((controlMask,xK_f)    ,move (1,0))
-    , ((0,xK_Down)           ,move (0,1))
-    , ((controlMask,xK_n)    ,move (0,1))
-    , ((0,xK_Up)             ,move (0,-1))
-    , ((controlMask,xK_p)    ,move (0,-1))
-    , ((0,xK_BackSpace)      ,backspace)
-    , ((controlMask,xK_e)    ,exclude)
-    , ((controlMask,xK_i)    ,include)
-    ]

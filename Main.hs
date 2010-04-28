@@ -31,6 +31,7 @@ import System.IO
 import Text.Parsec hiding ((<|>), many, optional)
 import Text.Parsec.String
 
+import GSMenu.Config
 import GSMenu.Pick
 import GSMenu.Util
 
