@@ -350,8 +350,6 @@ pushFilter f = do
     td_filters = FilterState { fl_filter = f
                              , fl_elms   = elms'
                              , fl_elmap  = elmap } : td_filters s }
-  redrawAllElements
-  updateTextInput
 
 popFilter :: TwoD a ()
 popFilter =
@@ -401,7 +399,6 @@ exclude = solidify Exclude
 include :: TwoD a ()
 include = solidify Include
 
-
 move :: (Integer, Integer) -> TwoD a ()
 move (dx, dy) = do
   state <- get
@@ -447,7 +444,7 @@ handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
       maybe unbound id $ M.lookup (m',ks) $ keymap
       eventLoop
   where m' = cleanMask m
-        unbound | all (not . isControl) s = input s
+        unbound | not $ any isControl s = input s
                 | otherwise = return ()
 
 handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
