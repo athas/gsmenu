@@ -112,7 +112,7 @@ runWithCfg cfg = do
   sel   <- gpick dpy screen rect defaultGPConfig elems
   case sel of
     Nothing -> exitFailure
-    Just el -> putStrLn el >> exitSuccess
+    Just el -> putStr el >> exitSuccess
     where reader
            | cfg_complex cfg = readElementsC "stdin"
            | otherwise       = readElements
