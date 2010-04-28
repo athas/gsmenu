@@ -1,0 +1,110 @@
+.TH GSMENU 1 gsmenu\-VERSION
+.SH NAME
+gsmenu \- grid menu
+.SH SYNOPSIS
+.B gsmenu
+.RB [ \-d " <display>"]
+.RB [ \-c ]
+.RB [ \-e]
+.RB [ \-h ]
+.RB [ \-v ]
+.SH DESCRIPTION
+.SS Overview
+gsmenu is a generic grid menu for X11, originally a port of the
+GridSelect contrib for XMonad.
+.SS Options
+.TP
+.B \-d
+specifies the X server to contact.
+.TP
+.B \-c
+makes gsmenu accept complex input format (see below).
+.TP
+.B \-e
+print the selected item as an index into the (0-indexed) sequence of
+input elements.
+.TP
+.B \-h
+prints command option summary to standard output, then exits.
+.TP
+.B \-v
+prints version information to standard output, then exits.
+.SH USAGE
+gsmenu reads a list of newline-separated elements from standard input
+and presents them in a grid.  Each element has a foreground and a
+background colour, as well as a name (what will be visible on the
+screen) and a list of tags that can be used for filtering.
+.SS INPUT FORMAT
+In the "simple" input format (the default), each line corresponds to
+the name of a single element and each element has an empty set of
+tags.  In the "complex" input format, entries take the form of
+key-value pairs, with the key being a sequence of alphanumerics,
+followed by an equals sign, followed by a value in double quotes
+(double-quotes can be embedded in values by doubling them).  For
+example, an element might be
+
+.nf
+name="foo" bg="red"
+.fi
+
+And a list-value can be given by simply writing more double-quoted
+strings (this also showcases double quote-escaping):
+
+.nf
+name="quote ""this"" please" tags="bar" "baz" bg="red"
+.fi
+
+The following keys are defined:
+.TP
+.B name
+The string that will be displayed in the grid.
+.TP
+.B fg
+The foreground (text) colour of the element (#RGB, #RRGGBB, and color
+names are supported).
+.TP
+.B bg
+The background colour of the element (#RGB, #RRGGBB, and color
+names are supported).
+.TP
+.B tags
+A list of tags of the element, used when filtering.
+
+.SS INTERACTION
+When the user selects an element and presses Return, his/her choice is
+printed to standard output (or its index, if
+.B \-e
+is used) and gsmenu
+terminates.  Elements can be selected by clicking on them with the
+mouse.  Additionally, the following keyboard commands are recognised:
+.TP
+.B Any printable character
+Appends the character to the text in the input field.  This works as a filter:
+only items containing this text (possibly in a tag) will be displayed.
+.TP
+.B Backspace
+Remove the last character in the input field, or if empty, open the
+topmost filter for editing.
+.TP
+.B Left/Right/Up/Down (CTRL\-b/CTRL-f/CTRL\-p/CTRL\-n)
+Move focus in the grid.
+.TP
+.B CTRL\-i
+Solidify the current input as a filter, meaning that a new filter can be entered while the earlier will still apply.
+.TP
+.B CTRL\-e
+Solidify the current input as an inverse filter, meaning that only
+nonmatches will pass
+.TP
+.B Escape.
+Cancel selection and exit gsmenu
+.SH EXIT STATUS
+gsmenu returns a
+.B 0
+exit status on success,
+.B 1
+if there was an internal problem, and
+.B 2
+if the user cancelled.
+.SH SEE ALSO
+.BR dmenu (1)
