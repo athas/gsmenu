@@ -289,7 +289,7 @@ updateTextInput f = do
            , tp_fcolors = fcolors }
       <- asks td_textpane
   new <- downcase <$> f <$> gets td_tbuffer
-  let oks = map select $ filter (isInfixOf new . el_disp) $ allelms
+  let oks = map select $ filter (isInfixOf new . downcase . el_disp) $ allelms
   changingState $ \s -> (s { td_elementmap = zip (repeat (0,0)) oks
                            , td_tbuffer = new }
                         , ())
