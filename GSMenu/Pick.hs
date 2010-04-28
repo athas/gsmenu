@@ -95,7 +95,7 @@ data Filter = Include String
 
 passes :: Filter -> Element a -> Bool
 passes (Include s) elm =
-  any (isInfixOf $ downcase s) strs
+  any (isInfixOf $ downcase s) fields
     where fields = map downcase (el_disp elm : el_tags elm)
 passes (Exclude s) elm = not $ passes (Include s) elm
 passes (Running s) elm = passes (Include s) elm
@@ -341,7 +341,9 @@ updateTextInput = do
 
 changingState :: TwoD a b -> TwoD a b
 changingState f =
-  f <* redrawAllElements <* updateTextInput
+  f <* modify (\s -> s { td_curpos = (0,0) })
+    <* redrawAllElements
+    <* updateTextInput
 
 pushFilter :: Filter -> TwoD a ()
 pushFilter f = do
