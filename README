@@ -1,0 +1,26 @@
+`gsmenu` - a generic visual menu
+================================
+
+`gsmenu` is a program that reads a list of entries from standard input
+(one per line) and provides a visual, grid-based interface from which
+the user can select one, with either mouse or keyboard.  The manual
+page contains full documentation.
+
+Installation
+------------
+
+Assuming a working Cabal install, just do 'cabal install'.  Any
+missing dependencies will automatically be downloaded and installed.
+You may have to perform a 'cabal update' first to ensure that your
+package list is up to date.
+
+Inspiration
+-----------
+
+This program is mostly a port of the GridSelect contrib for XMonad by
+Clemens Fruhwirth.
+
+Bugs
+----
+
+Please report any found bugs to the maintainer at <athas@sigkill.dk>.
