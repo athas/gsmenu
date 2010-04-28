@@ -1,3 +1,16 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Main
+-- Author      :  Troels Henriksen <athas@sigkill.dk>
+-- License     :  MIT-style (see LICENSE)
+--
+-- Stability   :  stable
+-- Portability :  unportable
+--
+-- gsmenu, a generic grid-based menu.
+--
+-----------------------------------------------------------------------------
+
 module Main () where
 
 import Control.Applicative
