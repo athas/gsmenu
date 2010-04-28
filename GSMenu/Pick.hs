@@ -38,8 +38,6 @@ import Graphics.X11.Xshape
 import GSMenu.Font
 import GSMenu.Util
 
-import System.IO
-
 data GPConfig a = GPConfig {
       gp_bordercolor  :: String
     , gp_cellheight   :: Dimension
@@ -87,22 +85,46 @@ data TextPane a = TextPane {
     , tp_width     :: Dimension
     }
 
+data Filter = Include String
+            | Exclude String
+            | Running String
+
+passes :: Filter -> Element a -> Bool
+passes (Include s) =
+  isInfixOf s . downcase . el_disp
+passes (Exclude s) = not . passes (Include s)
+passes (Running s) = passes (Include s)
+
+apply :: Filter -> [Element a] -> [Element a]
+apply f = filter $ passes f
+
+isRunning :: Filter -> Bool
+isRunning (Running _) = True
+isRunning _           = False
+
+data FilterState a = FilterState {
+      fl_filter :: Filter
+    , fl_elmap  :: TwoDElementMap a
+    , fl_elms   :: [Element a]
+  }
+
 data TwoDState a = TwoDState {
       td_curpos     :: TwoDPosition
-    , td_elementmap :: TwoDElementMap a
     , td_colorcache :: M.Map (String, String)
                        (GC, String, String)
     , td_tbuffer    :: TextBuffer
+    , td_filters    :: [FilterState a]
     }
 
 data TwoDConf a = TwoDConf {
-      td_elempane  :: ElemPane
-    , td_textpane  :: TextPane a
-    , td_gpconfig  :: GPConfig a
-    , td_display   :: Display
-    , td_screen    :: Screen
-    , td_font      :: GSMenuFont
-    , td_elms      :: [Element a]
+      td_elempane :: ElemPane
+    , td_textpane :: TextPane a
+    , td_gpconfig :: GPConfig a
+    , td_display  :: Display
+    , td_screen   :: Screen
+    , td_font     :: GSMenuFont
+    , td_elms     :: [Element a]
+    , td_elmap    :: TwoDElementMap a
     }
 
 newtype TwoD a b = TwoD (StateT (TwoDState a)
@@ -117,23 +139,31 @@ instance Applicative (TwoD a) where
 evalTwoD ::  TwoD a b -> TwoDState a -> TwoDConf a -> IO b
 evalTwoD (TwoD m) s c = runReaderT (evalStateT m s) c
 
-changingState :: (TwoDState a -> (TwoDState a, b)) -> TwoD a b
-changingState f = do
-  (s, val) <- f <$> get
+elements :: TwoD a [Element a]
+elements = do
+  s        <- get
+  allelms  <- asks td_elms
+  return $ fromMaybe allelms $ fl_elms <$> listToMaybe (td_filters s)
+
+elementMap :: TwoD a (TwoDElementMap a)
+elementMap = do
+  s        <- get
+  elmap  <- asks td_elmap
+  return $ fromMaybe elmap $ fl_elmap <$> listToMaybe (td_filters s)
+
+elementGrid :: [Element a] -> TwoD a (TwoDElementMap a)
+elementGrid elms = do
   gpconfig <- asks td_gpconfig
   rwidth   <- asks (ep_width . td_elempane)
   rheight  <- asks (ep_height . td_elempane)
-  let elms = map snd $ td_elementmap s
-      restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
+  let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
       restrictX = floor $ restriction (fi rwidth) gp_cellwidth
       restrictY = floor $ restriction (fi rheight) gp_cellheight
       originPosX = floor $ (gp_originFractX gpconfig - (1/2)) * 2 * fromIntegral restrictX
       originPosY = floor $ (gp_originFractY gpconfig - (1/2)) * 2 * fromIntegral restrictY
       coords = diamondRestrict restrictX restrictY originPosX originPosY
-  put s { td_elementmap = zip coords elms }
-  redrawAllElements
-  return val
-
+  return (zip coords $ map select elms)
+  
 select :: Element a -> Element (TwoD a (Maybe a))
 select elm = elm { el_data = return $ Just $ el_data elm }
 
@@ -250,7 +280,7 @@ updatingBoxes f els = do
 
 redrawAllElements :: TwoD a ()
 redrawAllElements = do
-  els <- gets td_elementmap
+  els <- elementMap
   dpy <- asks td_display
   ElemPane { ep_width     = pw
            , ep_height    = ph
@@ -280,36 +310,92 @@ redrawElements elementmap = do
                           | otherwise = colors
   updatingBoxes update elementmap
 
-updateTextInput :: (TextBuffer -> TextBuffer) -> TwoD a ()
-updateTextInput f = do
-  allelms  <- asks td_elms
+updateTextInput :: TwoD a ()
+updateTextInput = do
   dpy      <- asks td_display
   TextPane { tp_bggc = bggc, tp_win = win, tp_font = font 
            , tp_lowerleft = (x, y), tp_width = w, tp_fieldgc = fgc 
            , tp_fcolors = fcolors }
       <- asks td_textpane
-  new <- downcase <$> f <$> gets td_tbuffer
-  let oks = map select $ filter (isInfixOf new . downcase . el_disp) $ allelms
-  changingState $ \s -> (s { td_elementmap = zip (repeat (0,0)) oks
-                           , td_tbuffer = new }
-                        , ())
-  newdispelms <- gets td_elementmap
-  (a,d) <- textExtentsXMF font new
+  text  <- buildStr <$> gets (map fl_filter . td_filters)
+  elmap <- elementMap
+  (a,d) <- textExtentsXMF font text
   let h = max mh $ fi $ a + d
-      (fg, bg) = fcolors newdispelms
+      (fg, bg) = fcolors elmap
   io $ do moveResizeWindow dpy win x (y-fi h) w h
           fillRectangle dpy win bggc 0 0 w h
           setForeground dpy fgc =<< stringToPixel dpy bg
           fillRectangle dpy win fgc margin 0 50 h
-  printStringXMF dpy win font fgc fg bg margin (fi a) new
+  printStringXMF dpy win font fgc fg bg margin (fi a) text
     where mh = 1
           margin = 20
+          buildStr (Exclude str:fs) = buildStr fs ++ "¬" ++ str ++ "/"
+          buildStr (Include str:fs) = buildStr fs ++ str ++ "/"
+          buildStr (Running str:fs) = buildStr fs ++ take 1 (reverse str)
+          buildStr _                = ""
+
+changingState :: TwoD a b -> TwoD a b
+changingState f =
+  f <* redrawAllElements <* updateTextInput
+
+pushFilter :: Filter -> TwoD a ()
+pushFilter f = do
+  elms' <- apply f <$> elements
+  elmap <- elementGrid elms'
+  modify $ \s -> s {
+    td_filters = FilterState { fl_filter = f
+                             , fl_elms   = elms'
+                             , fl_elmap  = elmap } : td_filters s }
+  redrawAllElements
+  updateTextInput
+
+popFilter :: TwoD a ()
+popFilter =
+  modify $ \s -> s { td_filters = tail (td_filters s) }
+
+topFilter :: TwoD a (Maybe Filter)
+topFilter = do
+  s <- get
+  case td_filters s of
+    (f:_) -> return $ Just $ fl_filter f
+    _     -> return Nothing
 
 input :: String -> TwoD a ()
-input = updateTextInput . flip (++)
+input ""  = return ()
+input str = changingState $ do
+  f <- topFilter
+  let str' = case f of
+               Just (Running x) -> x ++ str
+               _                -> str
+  pushFilter $ Running str'
 
 backspace :: TwoD a ()
-backspace = updateTextInput (\s -> take (length s - 1) s)
+backspace = changingState $ do
+  f <- topFilter
+  case f of
+    Nothing -> return ()
+    Just (Running _)   -> popFilter
+    Just (Exclude str) -> runnings str
+    Just (Include str) -> runnings str
+    where runnings str = do
+            popFilter
+            mapM_ (pushFilter . Running) $ inits str
+
+solidify :: (String -> Filter) -> TwoD a ()
+solidify ff = changingState $ do
+  f <- topFilter
+  case f of
+    Just (Running str) -> do
+      modify $ \s -> s { td_filters =  dropRunning $ td_filters s }
+      pushFilter (ff str)
+    _                  -> return ()
+    where dropRunning = dropWhile (isRunning . fl_filter)
+
+exclude :: TwoD a ()
+exclude = solidify Exclude
+
+include :: TwoD a ()
+include = solidify Include
 
 eventLoop :: TwoD a (Maybe a)
 eventLoop = do
@@ -333,31 +419,32 @@ handle :: (KeySym, String) -> Event -> TwoD a (Maybe a)
 handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
     | t == keyPress && ks == xK_Escape = return Nothing
     | t == keyPress && ks == xK_Return = do
-       (TwoDState { td_curpos = pos, td_elementmap = elmap }) <- get
-       case lookup pos elmap of
-         Nothing  -> eventLoop
-         Just elm -> do maybe eventLoop (return . Just) =<< el_data elm
+      pos <- gets td_curpos
+      elmap <- elementMap
+      case lookup pos elmap of
+        Nothing  -> eventLoop
+        Just elm -> do maybe eventLoop (return . Just) =<< el_data elm
     | t == keyPress = do
-        keymap <- asks (gp_keymap . td_gpconfig)
-        maybe unbound id $ M.lookup (m',ks) $ keymap
-        eventLoop
+      keymap <- asks (gp_keymap . td_gpconfig)
+      maybe unbound id $ M.lookup (m',ks) $ keymap
+      eventLoop
   where m' = cleanMask m
         unbound | all (not . isControl) s = input s
                 | otherwise = return ()
 
 handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
     | t == buttonRelease = do
-        elmap <- gets td_elementmap
-        ch    <- asks (gp_cellheight . td_gpconfig)
-        cw    <- asks (gp_cellwidth . td_gpconfig)
-        w     <- asks (ep_width . td_elempane)
-        h     <- asks (ep_height . td_elempane)
-        let gridX = fi $ (fi x - (w - cw) `div` 2) `div` cw
-            gridY = fi $ (fi y - (h - ch) `div` 2) `div` ch
-        case lookup (gridX,gridY) elmap of
-          Nothing  -> eventLoop
-          Just elm -> do
-            maybe eventLoop (return . Just) =<< el_data elm
+      elmap <- elementMap
+      ch    <- asks (gp_cellheight . td_gpconfig)
+      cw    <- asks (gp_cellwidth . td_gpconfig)
+      w     <- asks (ep_width . td_elempane)
+      h     <- asks (ep_height . td_elempane)
+      let gridX = fi $ (fi x - (w - cw) `div` 2) `div` cw
+          gridY = fi $ (fi y - (h - ch) `div` 2) `div` ch
+      case lookup (gridX,gridY) elmap of
+        Nothing  -> eventLoop
+        Just elm -> do
+          maybe eventLoop (return . Just) =<< el_data elm
     | otherwise = eventLoop
 
 handle _ (ExposeEvent { ev_count = 0 }) = redrawAllElements >> eventLoop
@@ -481,19 +568,20 @@ gpick dpy screen rect gpconfig ellist = do
           coords = diamondRestrict restrictX restrictY originPosX originPosY
           boxelms = map select ellist
           elmap  = zip coords boxelms
-      evalTwoD (do updateTextInput (const "") 
+      evalTwoD (do updateTextInput
                    redrawAllElements 
                    eventLoop)
         TwoDState { td_curpos     = head coords
-                  , td_elementmap = elmap
                   , td_colorcache = M.empty 
-                  , td_tbuffer    = "" }
+                  , td_tbuffer    = "" 
+                  , td_filters    = [] }
         TwoDConf { td_elempane  = ep
                  , td_textpane  = tp
                  , td_gpconfig  = gpconfig
                  , td_display   = dpy
                  , td_screen    = screen
                  , td_font      = font
+                 , td_elmap     = elmap
                  , td_elms      = ellist }
   freeElemPane dpy ep
   freeTextPane dpy tp
@@ -503,8 +591,8 @@ gpick dpy screen rect gpconfig ellist = do
 move :: (Integer, Integer) -> TwoD a ()
 move (dx, dy) = do
   state <- get
-  let elmap    = td_elementmap state
-      (ox, oy) = td_curpos state
+  elmap <- elementMap
+  let (ox, oy) = td_curpos state
       newPos   = (ox+dx, oy+dy)
       newSelectedEl = findInElementMap newPos elmap
   when (isJust newSelectedEl) $ do
@@ -537,4 +625,6 @@ defaultGPNav = M.fromList
     , ((0,xK_Up)             ,move (0,-1))
     , ((controlMask,xK_p)    ,move (0,-1))
     , ((0,xK_BackSpace)      ,backspace)
+    , ((controlMask,xK_e)    ,exclude)
+    , ((controlMask,xK_i)    ,include)
     ]
