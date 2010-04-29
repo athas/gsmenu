@@ -617,7 +617,7 @@ mkTextPane dpy screen rect gpconfig = do
   font <- initXMF dpy (gp_inputfont gpconfig)
   let fcolors [] = ("white", "red")
       fcolors _  = ("white", "blue")
-  mapWindow dpy win
+  _ <- mapRaised dpy win
   return TextPane { tp_win       = win
                   , tp_bggc      = bggc
                   , tp_fieldgc   = fgc
@@ -644,8 +644,8 @@ gpick _ _ _ _ [] = return Nothing
 gpick dpy screen rect gpconfig ellist = do
   let rwidth  = rect_width rect
       rheight = rect_height rect
-  tp <- mkTextPane dpy screen rect gpconfig
   ep@ElemPane { ep_win = win } <- mkElemPane dpy screen rect
+  tp <- mkTextPane dpy screen rect gpconfig
   status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
   grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
   font      <- initXMF dpy (gp_font gpconfig)
