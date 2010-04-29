@@ -71,12 +71,13 @@ names are supported).
 A list of tags of the element, used when filtering.
 
 .SS INTERACTION
-When the user selects an element and presses Return, his/her choice is
-printed to standard output (or its index, if
+When the user moves focus to an element and presses Return, that
+element is selected and is printed to standard output (or its index,
+if
 .B \-e
-is used) and gsmenu
-terminates.  Elements can be selected by clicking on them with the
-mouse.  Additionally, the following keyboard commands are recognised:
+is used) and gsmenu terminates.  Elements can also be selected by
+clicking on them with the mouse.  Additionally, the following keyboard
+commands are recognised:
 .TP
 .B Any printable character
 Appends the character to the text in the input field.  This works as a filter:
@@ -92,9 +93,21 @@ Move focus in the grid.
 .B CTRL\-i
 Solidify the current input as a filter, meaning that a new filter can be entered while the earlier will still apply.
 .TP
-.B CTRL\-e
+.B CTRL\-d
 Solidify the current input as an inverse filter, meaning that only
 nonmatches will pass
+.TP
+.B CTRL\-a
+Set focus to the leftmost element in the row.
+.TP
+.B CTRL\-e
+Set focus to the rightmost element in the row.
+.TP
+.B CTRL\-s
+Focus on the next element following a spiral path from the center.
+.TP
+.B CTRL\-r
+Focus on the previous element following a spiral path from the center.
 .TP
 .B Escape.
 Cancel selection and exit gsmenu

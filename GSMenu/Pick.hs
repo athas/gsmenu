@@ -20,6 +20,10 @@ module GSMenu.Pick
     , gpick
       
     , move
+    , next
+    , prev
+    , beg
+    , end
     , backspace
     , include
     , exclude
@@ -28,10 +32,10 @@ module GSMenu.Pick
 import Data.Maybe
 import Data.Bits
 import Data.Char
+import Data.Ord
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Arrow
 import Data.List as L
 import qualified Data.Map as M
 
@@ -173,17 +177,16 @@ select :: Element a -> Element (TwoD a (Maybe a))
 select elm = elm { el_data = return $ Just $ el_data elm }
 
 diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
--- FIXME remove nub
-diamondLayer n = 
-  nub $ ul ++ (map (negate *** id) ul) ++
-              (map (negate *** negate) ul) ++
-              (map (id *** negate) ul)
-    where ul = [ (x,n-x) | x <- [0..n] ]
+diamondLayer 0 = [(0,0)]
+diamondLayer n = concat [ zip [0..]      [n,n-1..1]
+                        , zip [n,n-1..1] [0,-1..]
+                        , zip [0,-1..]   [-n..(-1)]
+                        , zip [-n..(-1)] [0,1..] ]
 
 diamond :: (Enum a, Num a) => [(a, a)]
 diamond = concatMap diamondLayer [0..]
 
-diamondRestrict :: Integer -> Integer -> Integer -> Integer -> [(Integer, Integer)]
+diamondRestrict :: Integer -> Integer -> Integer -> Integer -> [TwoDPosition]
 diamondRestrict x y originX originY =
   L.filter (\(x',y') -> abs x' <= x && abs y' <= y) .
   map (\(x', y') -> (x' + originX, y' + originY)) .
@@ -375,13 +378,13 @@ input str = changingState $ do
   pushFilter $ Running str'
 
 backspace :: TwoD a ()
-backspace = changingState $ do
+backspace = do
   f <- topFilter
   case f of
     Nothing -> return ()
-    Just (Running _)   -> popFilter
-    Just (Exclude str) -> runnings str
-    Just (Include str) -> runnings str
+    Just (Running _)   -> changingState popFilter
+    Just (Exclude str) -> changingState $ runnings str
+    Just (Include str) -> changingState $ runnings str
     where runnings str = do
             popFilter
             mapM_ (pushFilter . Running) $ drop 1 $ inits str
@@ -402,7 +405,7 @@ exclude = solidify Exclude
 include :: TwoD a ()
 include = solidify Include
 
-move :: (Integer, Integer) -> TwoD a ()
+move :: TwoDPosition -> TwoD a ()
 move (dx, dy) = do
   state <- get
   elmap <- elementMap
@@ -414,6 +417,65 @@ move (dx, dy) = do
     redrawElements
       (catMaybes [ findInElementMap (ox, oy) elmap
                  , newSelectedEl])
+
+moveTo :: TwoDPosition -> TwoD a ()
+moveTo (nx, ny) = do
+  (x,y) <- gets td_curpos
+  move (nx-x, ny-y)
+
+dist :: TwoDPosition -> Integer
+dist (x,y) = abs x + abs y
+
+visibleRing :: TwoDElementMap a -> Integer -> [TwoDPosition]
+visibleRing elmap r =
+  diamondLayer (r `mod` (maxdist + 1)) `intersect` (map fst elmap)
+    where maxdist = foldr (max . dist . fst) 0 elmap
+
+skipalong :: ([TwoDPosition] -> TwoDPosition) 
+          -> (Integer -> Integer)
+          -> ([TwoDPosition] -> TwoDPosition)
+          -> (([TwoDPosition], [TwoDPosition]) -> TwoDPosition)
+          -> TwoD a ()
+skipalong pf nif sf nf = do
+  pos    <- gets td_curpos
+  elmap  <- elementMap
+  let d      = dist pos
+      circle = visibleRing elmap d
+      pos'
+       | pos == pf circle =
+           sf $ visibleRing elmap $ nif d
+       | otherwise =
+           nf $ break (==pos) circle
+  moveTo pos'
+
+next :: TwoD a ()
+next = skipalong last (+1) jump forward
+    where jump (p:_) = p
+          jump _     = (0,0)
+          forward (_, _:p:_) = p
+          forward _          = (0,0)
+
+prev :: TwoD a ()
+prev = skipalong head (+(-1)) jump forward
+    where jump [] = (0,0) -- will never happen
+          jump l  = last l
+          forward    ([], _) = (0,0)
+          forward    (l, _)  = last l
+
+lineMove :: ((TwoDPosition -> TwoDPosition -> Ordering) 
+             -> [TwoDPosition] -> TwoDPosition)
+         -> TwoD a ()
+lineMove f = do
+  (_,y)   <- gets td_curpos
+  elmap   <- elementMap
+  let row = filter ((==y) . snd) $ map fst elmap
+  moveTo $ f (comparing $ fst) row
+
+beg :: TwoD a ()
+beg = lineMove minimumBy
+
+end :: TwoD a ()
+end = lineMove maximumBy
 
 eventLoop :: TwoD a (Maybe a)
 eventLoop = do
