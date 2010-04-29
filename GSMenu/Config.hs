@@ -53,4 +53,5 @@ defaultGPNav = M.fromList
     , ((controlMask,xK_r)    ,prev)
     , ((controlMask,xK_a)    ,beg)
     , ((controlMask,xK_e)    ,end)
+    , ((controlMask,xK_w)    ,pop)
     ]

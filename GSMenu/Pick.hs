@@ -27,6 +27,7 @@ module GSMenu.Pick
     , backspace
     , include
     , exclude
+    , pop
     ) where
 
 import Data.Maybe
@@ -359,7 +360,7 @@ pushFilter f = do
 
 popFilter :: TwoD a ()
 popFilter =
-  modify $ \s -> s { td_filters = tail (td_filters s) }
+  modify $ \s -> s { td_filters = drop 1 (td_filters s) }
 
 topFilter :: TwoD a (Maybe Filter)
 topFilter = do
@@ -476,6 +477,19 @@ beg = lineMove minimumBy
 
 end :: TwoD a ()
 end = lineMove maximumBy
+
+pop :: TwoD a ()
+pop = do
+  f <- topFilter
+  case f of
+    Just (Running _) -> changingState $ pop'
+    Just _           -> changingState popFilter
+    _                -> return ()
+    where pop' = do
+            f <- topFilter
+            case f of
+              Just (Running _) -> popFilter >> pop'
+              _                -> return ()
 
 eventLoop :: TwoD a (Maybe a)
 eventLoop = do
