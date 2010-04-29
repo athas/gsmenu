@@ -384,7 +384,7 @@ backspace = changingState $ do
     Just (Include str) -> runnings str
     where runnings str = do
             popFilter
-            mapM_ (pushFilter . Running) $ inits str
+            mapM_ (pushFilter . Running) $ drop 1 $ inits str
 
 solidify :: (String -> Filter) -> TwoD a ()
 solidify ff = changingState $ do
