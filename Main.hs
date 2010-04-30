@@ -115,8 +115,9 @@ runWithCfg cfg = do
   rect  <- findRectangle dpy (rootWindowOfScreen screen)
   sel   <- gpick dpy screen rect defaultGPConfig elems
   case sel of
-    Nothing -> exitWith $ ExitFailure 2
-    Just el -> putStr el >> exitSuccess
+    Left reason     -> err reason >> exitWith (ExitFailure 1)
+    Right Nothing   -> exitWith $ ExitFailure 2
+    Right (Just el) -> putStr el >> exitSuccess
     where reader
            | cfg_complex cfg = readElementsC "stdin"
            | otherwise       = readElements

@@ -639,8 +639,8 @@ freeTextPane dpy TextPane { tp_win      = win
 -- | Brings up a 2D grid of elements in the center of the screen, and one can
 -- select an element with cursors keys. The selected element is returned.
 gpick :: Display -> Screen -> Rectangle -> GPConfig a
-      -> [Element a] -> IO (Maybe a)
-gpick _ _ _ _ [] = return Nothing
+      -> [Element a] -> IO (Either String (Maybe a))
+gpick _ _ _ _ [] = return $ Right Nothing
 gpick dpy screen rect gpconfig ellist = do
   let rwidth  = rect_width rect
       rheight = rect_height rect
@@ -649,10 +649,7 @@ gpick dpy screen rect gpconfig ellist = do
   status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
   grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
   font      <- initXMF dpy (gp_font gpconfig)
-  selectedElement <-
-    if status /= grabSuccess then
-       do err "Could not establish keyboard grab" 
-          return Nothing
+  if status /= grabSuccess then return $ Left "Could not establish keyboard grab"
     else do
       let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
           restrictX = floor $ restriction (fi rwidth) gp_cellwidth
@@ -662,22 +659,22 @@ gpick dpy screen rect gpconfig ellist = do
           coords = diamondRestrict restrictX restrictY originPosX originPosY
           boxelms = map select ellist
           elmap  = zip coords boxelms
-      evalTwoD (do updateTextInput
-                   redrawAllElements 
-                   eventLoop)
-        TwoDState { td_curpos     = head coords
-                  , td_colorcache = M.empty 
-                  , td_tbuffer    = "" 
-                  , td_filters    = [] }
-        TwoDConf { td_elempane  = ep
-                 , td_textpane  = tp
-                 , td_gpconfig  = gpconfig
-                 , td_display   = dpy
-                 , td_screen    = screen
-                 , td_font      = font
-                 , td_elmap     = elmap
-                 , td_elms      = ellist }
-  freeElemPane dpy ep
-  freeTextPane dpy tp
-  releaseXMF dpy font
-  return selectedElement
+      selectedElement <- evalTwoD (do updateTextInput
+                                      redrawAllElements 
+                                      eventLoop)
+                         TwoDState { td_curpos     = head coords
+                                   , td_colorcache = M.empty 
+                                   , td_tbuffer    = "" 
+                                   , td_filters    = [] }
+                         TwoDConf { td_elempane  = ep
+                                  , td_textpane  = tp
+                                  , td_gpconfig  = gpconfig
+                                  , td_display   = dpy
+                                  , td_screen    = screen
+                                  , td_font      = font
+                                  , td_elmap     = elmap
+                                  , td_elms      = ellist }
+      freeElemPane dpy ep
+      freeTextPane dpy tp
+      releaseXMF dpy font
+      return $ Right selectedElement
