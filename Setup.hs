@@ -44,14 +44,11 @@ gsmenuPostInst a (InstallFlags { installPackageDB = db, installVerbosity = v }) 
     do  gsmenuPostCopy a (defaultCopyFlags { copyDest = Flag NoCopyDest, copyVerbosity = v }) pd lbi
 
 gsmenuPostCopy a (CopyFlags { copyDest = cdf, copyVerbosity = vf }) pd lbi =
-    do let v = fromFlagOrDefault normal vf
-       let cd = fromFlagOrDefault NoCopyDest cdf
-       let dataPref = datadir (absoluteInstallDirs pd lbi cd)
-       createDirectoryIfMissing True dataPref
-       let gsmenuDir = buildDir lbi `combine` gsmenu
-       let manDir = if isWindows
-                      then dataPref `combine` "Documentation"
-                      else datadir (absoluteInstallDirs pd lbi cd) `combine` ".." `combine` "man" `combine` "man1"
-       when (not isWindows) $
-         do createDirectoryIfMissing True manDir
-            copyFileVerbose v ("gsmenu.1") (manDir `combine` "gsmenu.1")
+    do let v         = fromFlagOrDefault normal vf
+           cd        = fromFlagOrDefault NoCopyDest cdf
+           manDir    = mandir $ (absoluteInstallDirs pd lbi cd)
+           gsmenuDir = buildDir lbi `combine` gsmenu
+       when (not isWindows) $ do
+         putStrLn $ "Installing manpage in in " ++ manDir
+         createDirectoryIfMissing True manDir
+         copyFileVerbose v ("gsmenu.1") (manDir `combine` "gsmenu.1")
