@@ -4,7 +4,7 @@ homepage:           http://sigkill.dk
 synopsis:           A visual generic menu
 description:
     Standalone port of XMonadContrib's GridSelect.
-category:           System
+category:           Tools
 license:            BSD3
 license-file:       LICENSE
 author:             Troels Henriksen
