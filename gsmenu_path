@@ -1,0 +1,36 @@
+#!/bin/sh
+CACHE=$HOME/.gsmenu_cache
+IFS=:
+
+uptodate() {
+    test -f "$CACHE" &&
+    for dir in $PATH
+    do
+	test ! $dir -nt "$CACHE" || return 1
+    done
+}
+
+if ! uptodate
+then
+    for dir in $PATH
+    do
+        tags=""
+        IFS=/
+        for part in $dir
+        do
+            tags="\"$part\" ${tags}"
+        done
+        if [ ${tags} != '' ]
+        then
+            tags="tags=$tags"
+        fi
+	cd "$dir" &&
+	for file in *
+	do
+	    test -x "$file" && echo "name=\"$file\" $tags"
+	done
+    done | sort | uniq > "$CACHE".$$ &&
+    mv "$CACHE".$$ "$CACHE"
+fi
+
+cat "$CACHE"

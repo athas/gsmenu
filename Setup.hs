@@ -27,6 +27,7 @@ import System.Exit
 import System.IO (hGetContents,hClose,hPutStr,stderr)
 import System.IO.Error (try)
 import System.Process (runInteractiveProcess,waitForProcess)
+import System.Posix
 import System.Directory
 import System.Info (os)
 import System.FilePath
@@ -46,9 +47,12 @@ gsmenuPostInst a (InstallFlags { installPackageDB = db, installVerbosity = v }) 
 gsmenuPostCopy a (CopyFlags { copyDest = cdf, copyVerbosity = vf }) pd lbi =
     do let v         = fromFlagOrDefault normal vf
            cd        = fromFlagOrDefault NoCopyDest cdf
-           manDir    = mandir $ (absoluteInstallDirs pd lbi cd)
-           gsmenuDir = buildDir lbi `combine` gsmenu
+           dirs      = absoluteInstallDirs pd lbi cd
+           bin       = combine (bindir dirs)
        when (not isWindows) $ do
-         putStrLn $ "Installing manpage in in " ++ manDir
-         createDirectoryIfMissing True manDir
-         copyFileVerbose v ("gsmenu.1") (manDir `combine` "gsmenu.1")
+         copyFileVerbose v ("gsmenu_path") (bin "gsmenu_path")
+         fs <- getFileStatus (bin "gsmenu")
+         setFileMode (bin "gsmenu_path") $ fileMode fs
+         putStrLn $ "Installing manpage in " ++ mandir dirs
+         createDirectoryIfMissing True $ mandir dirs
+         copyFileVerbose v ("gsmenu.1") (mandir dirs `combine` "gsmenu.1")
