@@ -9,7 +9,7 @@ license:            BSD3
 license-file:       LICENSE
 author:             Troels Henriksen
 maintainer:         athas@sigkill.dk
-cabal-version:      >= 1.2
+cabal-version:      >= 1.6
 build-type:         Custom
 
 flag use_xft
