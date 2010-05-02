@@ -206,7 +206,7 @@ element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
               el_colors = (fst $ el_colors elm, val) }
           procKv _   ("bg", _) = badval "bg"
           procKv elm ("tags",val) =
-            return elm { el_tags = el_tags elm ++ val }
+            return elm { el_tags = el_tags elm ++ filter (/="") val }
           procKv _ (k, _) = nokey k
           badval k = parserFail $ "Bad value for field " ++ k
           nokey  k = parserFail $ "Unknown key " ++ k
