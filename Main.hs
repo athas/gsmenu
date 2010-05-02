@@ -90,7 +90,7 @@ optVersion = Option ['v'] ["version"]
              "Print version number."
              
 versionString :: String
-versionString = "1.0"
+versionString = "1.1-dev"
              
 optDisplay :: OptDescr (AppConfig -> IO AppConfig)
 optDisplay = Option ['d'] ["display"]
