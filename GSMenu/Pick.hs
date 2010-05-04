@@ -106,7 +106,7 @@ passes (Exclude s) elm = not $ passes (Include s) elm
 passes (Running s) elm = passes (Include s) elm
 
 apply :: Filter -> [Element a] -> [Element a]
-apply f = filter $ passes f
+apply = filter . passes
 
 isRunning :: Filter -> Bool
 isRunning (Running _) = True
@@ -147,7 +147,7 @@ instance Applicative (TwoD a) where
     pure = return
 
 evalTwoD ::  TwoD a b -> TwoDState a -> TwoDConf a -> IO b
-evalTwoD (TwoD m) s c = runReaderT (evalStateT m s) c
+evalTwoD (TwoD m) = runReaderT . evalStateT m
 
 elements :: TwoD a [Element a]
 elements = do
@@ -312,7 +312,7 @@ redrawElements elementmap = do
   win     <- asks (ep_win . td_elempane)
   curpos  <- gets td_curpos
   let update ((x,y),Element { el_colors = colors
-                            , el_disp = text }) = do
+                            , el_disp = text }) =
         drawWinBox dpy win font bc colors' text padding
             where colors' | curpos == (x,y) =
                               ("black", "#faff69")
@@ -429,7 +429,7 @@ dist (x,y) = abs x + abs y
 
 visibleRing :: TwoDElementMap a -> Integer -> [TwoDPosition]
 visibleRing elmap r =
-  diamondLayer (r `mod` (maxdist + 1)) `intersect` (map fst elmap)
+  diamondLayer (r `mod` (maxdist + 1)) `intersect` map fst elmap
     where maxdist = foldr (max . dist . fst) 0 elmap
 
 skipalong :: ([TwoDPosition] -> TwoDPosition) 
@@ -470,7 +470,7 @@ lineMove f = do
   (_,y)   <- gets td_curpos
   elmap   <- elementMap
   let row = filter ((==y) . snd) $ map fst elmap
-  moveTo $ f (comparing $ fst) row
+  moveTo $ f (comparing fst) row
 
 beg :: TwoD a ()
 beg = lineMove minimumBy
@@ -482,7 +482,7 @@ pop :: TwoD a ()
 pop = do
   f <- topFilter
   case f of
-    Just (Running _) -> changingState $ pop'
+    Just (Running _) -> changingState pop'
     Just _           -> changingState popFilter
     _                -> return ()
     where pop' = do
@@ -517,10 +517,10 @@ handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
       elmap <- elementMap
       case lookup pos elmap of
         Nothing  -> eventLoop
-        Just elm -> do maybe eventLoop (return . Just) =<< el_data elm
+        Just elm -> maybe eventLoop (return . Just) =<< el_data elm
     | t == keyPress = do
       keymap <- asks (gp_keymap . td_gpconfig)
-      maybe unbound id $ M.lookup (m',ks) $ keymap
+      fromMaybe unbound $ M.lookup (m',ks) keymap
       eventLoop
   where m' = cleanMask m
         unbound | not $ any isControl s = input s
@@ -537,7 +537,7 @@ handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
           gridY = fi $ (fi y - (h - ch) `div` 2) `div` ch
       case lookup (gridX,gridY) elmap of
         Nothing  -> eventLoop
-        Just elm -> do
+        Just elm ->
           maybe eventLoop (return . Just) =<< el_data elm
     | otherwise = eventLoop
 
@@ -654,8 +654,8 @@ gpick dpy screen rect gpconfig ellist = do
       let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
           restrictX = floor $ restriction (fi rwidth) gp_cellwidth
           restrictY = floor $ restriction (fi rheight) gp_cellheight
-          originPosX = floor $ ((gp_originFractX gpconfig) - (1/2)) * 2 * fromIntegral restrictX
-          originPosY = floor $ ((gp_originFractY gpconfig) - (1/2)) * 2 * fromIntegral restrictY
+          originPosX = floor $ (gp_originFractX gpconfig - (1/2)) * 2 * fromIntegral restrictX
+          originPosY = floor $ (gp_originFractY gpconfig - (1/2)) * 2 * fromIntegral restrictY
           coords = diamondRestrict restrictX restrictY originPosX originPosY
           boxelms = map select ellist
           elmap  = zip coords boxelms

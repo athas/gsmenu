@@ -54,12 +54,12 @@ defaultConfig = AppConfig {
 main :: IO ()
 main = do
   opts  <- getOpt RequireOrder options <$> getArgs
-  dstr  <- getEnv "DISPLAY" `catch` (const $ return "")
+  dstr  <- getEnv "DISPLAY" `catch` const (return "")
   let cfg = defaultConfig { cfg_display = dstr }
   case opts of
     (opts', [], []) -> runWithCfg =<< foldl (>>=) (return cfg) opts'
     (_, nonopts, errs) -> do 
-              mapM_ (hPutStrLn stderr) $ map ("Junk argument: " ++) nonopts
+              mapM_ (hPutStrLn stderr . ("Junk argument: " ++)) nonopts
               usage <- usageStr
               hPutStrLn stderr $ concat errs ++ usage
               exitFailure
@@ -69,7 +69,7 @@ options :: [OptDescr (AppConfig -> IO AppConfig)]
 options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult]
 
 optHelp :: OptDescr (AppConfig -> IO AppConfig)
-optHelp = Option ['h'] ["help"]
+optHelp = Option "h" ["help"]
           (NoArg $ \_ -> do
              hPutStrLn stderr =<< usageStr
              exitSuccess)
@@ -82,7 +82,7 @@ usageStr = do
   return $ usageInfo header options
   
 optVersion :: OptDescr (AppConfig -> IO AppConfig)
-optVersion = Option ['v'] ["version"]
+optVersion = Option "v" ["version"]
              (NoArg $ \_ -> do 
                 hPutStrLn stderr ("gsmenu " ++ versionString ++ ".")
                 hPutStrLn stderr "Copyright (C) Troels Henriksen."
@@ -93,17 +93,17 @@ versionString :: String
 versionString = "1.1-dev"
              
 optDisplay :: OptDescr (AppConfig -> IO AppConfig)
-optDisplay = Option ['d'] ["display"]
+optDisplay = Option "d" ["display"]
              (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy" )
              "Specify the X display to connect to."
              
 optComplex :: OptDescr (AppConfig -> IO AppConfig)
-optComplex = Option ['c'] ["complex"]
+optComplex = Option "c" ["complex"]
              (NoArg (\cfg -> return $ cfg { cfg_complex = True }) )
              "Use complex input format."
 
 optEnumResult :: OptDescr (AppConfig -> IO AppConfig)
-optEnumResult = Option ['e'] ["enumerate"]
+optEnumResult = Option "e" ["enumerate"]
                 (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }) )
                 "Print the result as the (zero-indexed) element number."
 
@@ -122,14 +122,13 @@ runWithCfg cfg = do
            | cfg_complex cfg = readElementsC "stdin"
            | otherwise       = readElements
           valuer
-           | cfg_enumerate cfg = \_ i -> show i
+           | cfg_enumerate cfg = const show
            | otherwise         = \ s _ -> s
 
 setupDisplay :: String -> IO Display
-setupDisplay dstr = do
-  dpy <- openDisplay dstr `Prelude.catch` \_ -> do
+setupDisplay dstr =
+  openDisplay dstr `Prelude.catch` \_ ->
     error $ "Cannot open display '" ++ dstr ++ "'."
-  return dpy
 
 findRectangle :: Display -> Window -> IO Rectangle
 findRectangle dpy rootw = do
@@ -178,14 +177,14 @@ blankElem = Element {
 tagColors :: [String] -> (String, String)
 tagColors ts =
   let seed x = toInteger (sum $ map ((*x).fromEnum) s) :: Integer
-      (r,g,b) = hsv2rgb ((seed 83) `mod` 360,
-                         (fromInteger ((seed 191) `mod` 1000))/2500+0.4,
-                         (fromInteger ((seed 121) `mod` 1000))/2500+0.4)
-  in ("white", "#" ++ concat (map (twodigitHex.(round :: Double -> Word8).(*256)) [r, g, b] ))
+      (r,g,b) = hsv2rgb (seed 83 `mod` 360,
+                         fi (seed 191 `mod` 1000)/2500+0.4,
+                         fi  (seed 121 `mod` 1000)/2500+0.4)
+  in ("white", '#' : concatMap (twodigitHex.(round :: Double -> Word8).(*256)) [r, g, b] )
     where s = show ts
 
 twodigitHex :: Word8 -> String
-twodigitHex a = printf "%02x" a
+twodigitHex = printf "%02x"
 
 element :: GenParser Char u (Element a)
 element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
@@ -208,11 +207,11 @@ element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
           procKv elm ("tags",val) =
             return elm { el_tags = el_tags elm ++ filter (/="") val }
           procKv _ (k, _) = nokey k
-          badval k = parserFail $ "Bad value for field " ++ k
-          nokey  k = parserFail $ "Unknown key " ++ k
+          badval = parserFail . ("Bad value for field " ++)
+          nokey  = parserFail . ("Unknown key " ++)
 
 kvPair :: GenParser Char u (String, [String])
-kvPair = do
+kvPair =
   pure (,) <*> (many1 alphaNum <* realSpaces <* char '=' <* realSpaces)
            <*> many1 (value <* realSpaces)
 

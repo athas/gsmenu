@@ -49,8 +49,8 @@ downcase = map toLower
 -- | Conversion scheme as in http://en.wikipedia.org/wiki/HSV_color_space
 hsv2rgb :: Fractional a => (Integer,a,a) -> (a,a,a)
 hsv2rgb (h,s,v) =
-    let hi = (div h 60) `mod` 6 :: Integer
-        f = (((fromInteger h)/60) - (fromInteger hi)) :: Fractional a => a
+    let hi = div h 60 `mod` 6 :: Integer
+        f = fi h/60 - fi hi :: Fractional a => a
         q = v * (1-f)
         p = v * (1-s)
         t = v * (1-(1-f)*s)
