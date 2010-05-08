@@ -45,6 +45,7 @@ import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xshape
 
 import GSMenu.Font
+import qualified GSMenu.GCCache as G
 import GSMenu.Util
 
 data GPConfig a = GPConfig {
@@ -120,8 +121,7 @@ data FilterState a = FilterState {
 
 data TwoDState a = TwoDState {
       td_curpos     :: TwoDPosition
-    , td_colorcache :: M.Map (String, String)
-                       (GC, String, String)
+    , td_colorcache :: G.GCCache
     , td_tbuffer    :: TextBuffer
     , td_filters    :: [FilterState a]
     }
@@ -137,8 +137,8 @@ data TwoDConf a = TwoDConf {
     , td_elmap    :: TwoDElementMap a
     }
 
-newtype TwoD a b = TwoD (StateT (TwoDState a)
-                         (ReaderT (TwoDConf a) IO) b)
+newtype TwoD a b = TwoD (ReaderT (TwoDConf a)
+                         (StateT (TwoDState a) IO) b)
     deriving (Monad, Functor, MonadState (TwoDState a),
               MonadReader (TwoDConf a), MonadIO)
 
@@ -146,8 +146,8 @@ instance Applicative (TwoD a) where
     (<*>) = ap
     pure = return
 
-evalTwoD ::  TwoD a b -> TwoDState a -> TwoDConf a -> IO b
-evalTwoD (TwoD m) = runReaderT . evalStateT m
+runTwoD ::  TwoD a b -> TwoDConf a -> TwoDState a -> IO (b, TwoDState a)
+runTwoD (TwoD m) = runStateT . runReaderT m
 
 elements :: TwoD a [Element a]
 elements = do
@@ -216,21 +216,18 @@ drawWinBox :: Display -> Window -> GSMenuFont -> String
            -> Position -> Position -> Dimension -> Dimension
            -> TwoD a ()
 drawWinBox dpy win font bc (fg,bg) text cp x y cw ch = do
-  (gc, fg', bg') <- procColors dpy (fg, bg)
+  gc <- getGC win bg
+  bordergc <- getGC win bc
   textgc <- asks (ep_textgc . td_elempane)
   io $ do
-    bordergc <- createGC dpy win
-    bordercolor <- stringToPixel dpy bc
-    setForeground dpy bordergc bordercolor
     fillRectangle dpy win gc x y cw ch
     drawRectangle dpy win bordergc x y cw ch
     stext <- shrinkWhile shrinkIt
              (\n -> do size <- textWidthXMF dpy font n
                        return $ size > fi (cw-fi (2*cp)))
              text
-    printStringXMF dpy win font textgc fg' bg'
+    printStringXMF dpy win font textgc fg bg
       (fi (x+fi cp)) (fi (y+fi (div ch 2))) stext
-    freeGC dpy bordergc
 
 drawBoxMask :: Display -> GC -> Pixmap -> Position
             -> Position -> Dimension -> Dimension -> IO ()
@@ -238,35 +235,14 @@ drawBoxMask dpy gc pm x y w h = do
   setForeground dpy gc 1
   fillRectangle dpy pm gc x y w h
 
-procColors :: Display -> (String, String) -> TwoD a (GC, String, String)
-procColors dpy col@(fg, bg) = do
-  gcs <- gets td_colorcache
-  case M.lookup col gcs of
-    Just x -> return x
-    Nothing -> do
-      x <- procColors'
-      modify $ \s -> s { td_colorcache = M.insert col x gcs }
-      return x
-    where procColors' = do
-            screen <- asks td_screen
-            win <- asks (ep_win . td_elempane)
-            let wp = whitePixelOfScreen screen
-                bp = blackPixelOfScreen screen
-                badcol gc x = do err $ "Bad color " ++ x
-                                 setBackground dpy gc bp
-                                 setForeground dpy gc wp
-                                 return (gc, "black", "white")
-            io $ do
-              gc <- io $ createGC dpy win
-              fgc <- initColor dpy fg
-              bgc <- initColor dpy bg
-              case (fgc, bgc) of
-                (Just fgc', Just bgc') -> do
-                  setBackground dpy gc fgc'
-                  setForeground dpy gc bgc'
-                  return (gc, fg, bg)
-                (Nothing, _) -> badcol gc fg
-                (_, Nothing) -> badcol gc bg
+getGC :: Drawable -> String -> TwoD a GC
+getGC d fg = do
+  dpy <- asks td_display
+  screen <- asks td_screen
+  cache <- gets td_colorcache
+  (gc, cache') <- io $ G.getGC dpy screen cache d $ G.GCParams { G.gc_fg = fg}
+  modify $ \s -> s { td_colorcache = cache' }
+  return gc
 
 updatingBoxes :: (TwoDElement a
                   -> Position -> Position
@@ -659,22 +635,23 @@ gpick dpy screen rect gpconfig ellist = do
           coords = diamondRestrict restrictX restrictY originPosX originPosY
           boxelms = map select ellist
           elmap  = zip coords boxelms
-      selectedElement <- evalTwoD (do updateTextInput
-                                      redrawAllElements 
-                                      eventLoop)
-                         TwoDState { td_curpos     = head coords
-                                   , td_colorcache = M.empty 
-                                   , td_tbuffer    = "" 
-                                   , td_filters    = [] }
-                         TwoDConf { td_elempane  = ep
-                                  , td_textpane  = tp
-                                  , td_gpconfig  = gpconfig
-                                  , td_display   = dpy
-                                  , td_screen    = screen
-                                  , td_font      = font
-                                  , td_elmap     = elmap
-                                  , td_elms      = ellist }
+      (selectedElement, s) <- runTwoD (do updateTextInput
+                                          redrawAllElements 
+                                          eventLoop)
+                              TwoDConf { td_elempane  = ep
+                                       , td_textpane  = tp
+                                       , td_gpconfig  = gpconfig
+                                       , td_display   = dpy
+                                       , td_screen    = screen
+                                       , td_font      = font
+                                       , td_elmap     = elmap
+                                       , td_elms      = ellist }
+                              TwoDState { td_curpos     = head coords
+                                        , td_colorcache = G.empty
+                                        , td_tbuffer    = "" 
+                                        , td_filters    = [] }
       freeElemPane dpy ep
       freeTextPane dpy tp
+      G.freeCache dpy $ td_colorcache s
       releaseXMF dpy font
       return $ Right selectedElement

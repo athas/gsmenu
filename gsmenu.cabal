@@ -24,6 +24,7 @@ executable gsmenu
         cpp-options: -DXFT
     main-is:            Main.hs
     other-modules:      GSMenu.Config
+                        GSMenu.GCCache
                         GSMenu.Pick
                         GSMenu.Font
                         GSMenu.Util
