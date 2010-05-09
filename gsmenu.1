@@ -2,23 +2,25 @@
 .SH NAME
 gsmenu \- grid menu
 .SH SYNOPSIS
-.B gsmenu
-[\fB\-d=\fR\fIdisplay\fR]
+.nh
+gsmenu
+[\fB\-d=\fIdisplay\fR]
 [\fB\-c\fR]
 [\fB\-e\fR]
-[\fB\-h\fR]
-[\fB\-w\fR]
-[\fB\-p\fR]
-[\fB\-x\fR]
-[\fB\-y\fR]
-[\fB\-\-font=\fR\fIfont\fR]
-[\fB\-\-subfont=\fR\fIfont\fR]
-[\fB\-\-inputfont=\fR\fIfont\fR]
+[\fB\-h \fIheight\fR]
+[\fB\-w \fIwidth\fR\fR]
+[\fB\-p \fIpadding\fR]
+[\fB\-x \fIposition\fR]
+[\fB\-y \fIposition\fR]
+[\fB\-\-font=\fIfont\fR]
+[\fB\-\-subfont=\fIfont\fR]
+[\fB\-\-inputfont=\fIfont\fR]
 [\fB\-h\fR]
 [\fB\-v\fR]
 .SH DESCRIPTION
 .SS Overview
-gsmenu is a generic grid menu for X11, originally a port of the
+.B gsmenu
+is a generic grid menu for X11, originally a port of the
 GridSelect contrib for XMonad.  It displays elements as a grid of
 rectangular cells.
 .SS Options
@@ -47,7 +49,7 @@ Set the horizontal position of the center cell as a proportion of the
 screen width.
 .TP
 .B \-y
-As \-x, but sets the vertical position.
+As \fB\-x\fR, but sets the vertical position.
 .TP
 .B \-\-font
 The first line of elements is printed in this font.  Both traditional
@@ -66,7 +68,8 @@ prints command option summary to standard output, then exits.
 .B \-v
 prints version information to standard output, then exits.
 .SH USAGE
-gsmenu reads a list of newline-separated elements from standard input
+.B gsmenu
+reads a list of newline-separated elements from standard input
 and presents them in a grid.  Each element has a foreground and a
 background colour, as well as a name (what will be visible on the
 screen) and a list of tags that can be used for filtering.
