@@ -82,6 +82,7 @@ data ElemPane = ElemPane {
     , ep_maskgc    :: GC
     , ep_unmaskgc  :: GC
     , ep_textgc    :: GC
+    , ep_bordergc  :: GC
     }
 
 type TextBuffer = String
@@ -215,31 +216,32 @@ shrinkWhile sh p x = sw $ sh x
                             then sw ns
                             else return n
 
-drawWinBox :: Display -> Window -> GSMenuFont -> String
-           -> (String, String) -> String -> [String]
-           -> Dimension -> Position -> Position -> Dimension -> Dimension
+drawWinBox :: Window -> (String, String)
+           -> String -> [String]
+           -> Position -> Position -> Dimension -> Dimension
            -> TwoD a ()
-drawWinBox dpy win font bc (fg,bg) text sub cp x y cw ch = do
+drawWinBox win (fg,bg) text sub x y cw ch = do
   gc <- getGC win bg
-  bordergc <- getGC win bc
-  textgc <- asks (ep_textgc . td_elempane)
-  subfont <- asks td_subfont
+  cp <- asks (gp_cellpadding . td_gpconfig)
+  let x' = fi (x+fi cp)
+      y' = fi (y+fi (div ch 2))
+  TwoDConf { td_display = dpy, td_elempane = ep,
+             td_subfont = subfont, td_font = font }
+           <- ask
   io $ do
     fillRectangle dpy win gc x y cw ch
-    drawRectangle dpy win bordergc x y cw ch
+    drawRectangle dpy win (ep_bordergc ep) x y cw ch
     let stext f = shrinkWhile shrinkIt
                   (\n -> do size <- textWidthXMF dpy f n
                             return $ size > fi (cw-fi (2*cp)))
         height f = liftM (uncurry (+)) . textExtentsXMF f
         putline f voff s = do
           s' <- stext f s
-          printStringXMF dpy win f textgc fg bg x' voff s'
+          printStringXMF dpy win f (ep_textgc ep) fg bg x' voff s'
           height f s'
     h <- (+y') <$> (height font =<< stext font text)
     _ <- putline font y' text
     foldM_ (putline subfont) h sub
-    where x' = fi (x+fi cp)
-          y' = fi (y+fi (div ch 2))
 
 drawBoxMask :: Display -> GC -> Pixmap -> Position
             -> Position -> Dimension -> Dimension -> IO ()
@@ -293,15 +295,11 @@ redrawAllElements = do
 
 redrawElements :: TwoDElementMap a -> TwoD a ()
 redrawElements elementmap = do
-  dpy     <- asks td_display
-  font    <- asks td_font
-  bc      <- asks (gp_bordercolor . td_gpconfig)
-  padding <- asks (gp_cellpadding . td_gpconfig)
   win     <- asks (ep_win . td_elempane)
   curpos  <- gets td_curpos
   let update ((x,y),Element { el_colors = colors
                             , el_disp = (text, sub) }) =
-        drawWinBox dpy win font bc colors' text sub padding
+        drawWinBox win colors' text sub
             where colors' | curpos == (x,y) =
                               ("black", "#faff69")
                           | otherwise = colors
@@ -549,15 +547,18 @@ mkUnmanagedWindow dpy s rw x y w h = do
     createWindow dpy rw x y w h 0 copyFromParent
                  inputOutput visual attrmask attrs
 
-mkElemPane :: Display -> Screen -> Rectangle -> IO ElemPane
-mkElemPane dpy screen rect = do
+mkElemPane :: Display -> Screen -> Rectangle -> String -> IO ElemPane
+mkElemPane dpy screen rect bc = do
   let rootw   = rootWindowOfScreen screen
       rwidth  = rect_width rect
       rheight = rect_height rect
+      wp      = whitePixelOfScreen screen
   win <- mkUnmanagedWindow dpy screen rootw
            (rect_x rect) (rect_y rect) rwidth rheight
-  pm <- createPixmap dpy win rwidth rheight 1
-  maskgc <- createGC dpy pm
+  bordergc <- fgGC dpy win (bc, wp)
+  textgc   <- createGC dpy rootw
+  pm       <- createPixmap dpy win rwidth rheight 1
+  maskgc   <- createGC dpy pm
   setForeground dpy maskgc 0
   fillRectangle dpy pm maskgc 0 0 rwidth rheight
   xshapeCombineMask dpy win shapeBounding 0 0 pm shapeSet
@@ -565,7 +566,6 @@ mkElemPane dpy screen rect = do
   setForeground dpy unmaskgc 1
   mapWindow dpy win
   selectInput dpy win (exposureMask .|. keyPressMask .|. buttonReleaseMask)
-  textgc <- createGC dpy rootw
   return ElemPane {
                ep_width     = fi rwidth
              , ep_height    = fi rheight
@@ -573,16 +573,18 @@ mkElemPane dpy screen rect = do
              , ep_shapemask = pm
              , ep_maskgc    = maskgc
              , ep_unmaskgc  = unmaskgc
-             , ep_textgc    = textgc }
+             , ep_textgc    = textgc 
+             , ep_bordergc  = bordergc}
 
 freeElemPane :: Display -> ElemPane -> IO ()
 freeElemPane dpy ElemPane { ep_win      = win
                           , ep_maskgc   = maskgc
                           , ep_unmaskgc = unmaskgc
-                          , ep_textgc   = textgc } = do
+                          , ep_textgc   = textgc 
+                          , ep_bordergc  = bordergc} = do
   unmapWindow dpy win
   destroyWindow dpy win
-  mapM_ (freeGC dpy) [maskgc, unmaskgc, textgc]
+  mapM_ (freeGC dpy) [maskgc, unmaskgc, textgc, bordergc]
   sync dpy False
 
 fgGC :: Display -> Drawable -> (String, Pixel) -> IO GC
@@ -632,7 +634,8 @@ gpick _ _ _ _ [] = return $ Right Nothing
 gpick dpy screen rect gpconfig ellist = do
   let rwidth  = rect_width rect
       rheight = rect_height rect
-  ep@ElemPane { ep_win = win } <- mkElemPane dpy screen rect
+  ep@ElemPane { ep_win = win } <-
+    mkElemPane dpy screen rect $ gp_bordercolor gpconfig
   tp <- mkTextPane dpy screen rect gpconfig
   status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
   grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
