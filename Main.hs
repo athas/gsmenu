@@ -127,7 +127,8 @@ type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
 options :: [GSMenuOption a]
 options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult,
            optFont, optSubFont, optInputFont,
-           optCellHeight, optCellWidth, optCellPadding]
+           optCellHeight, optCellWidth, optCellPadding,
+           optOriginX, optOriginY]
 
 inGPConfig :: (String -> GPConfig a -> GPConfig a)
             -> String -> AppConfig a -> IO (AppConfig a)
@@ -139,8 +140,10 @@ tryRead ef s = case reads s of
                 _         -> error $ ef s
 
 readInt :: (Integral a, Read a) => String -> a
-readInt = tryRead $ \s ->
-  quote s ++ " is not an integer."
+readInt = tryRead $ (++ " is not an integer.") . quote
+
+readFloat :: (Fractional a, Read a) => String -> a
+readFloat = tryRead $ (++ " is not a decimal fraction.") . quote
 
 optHelp :: GSMenuOption a
 optHelp = Option "h" ["help"]
@@ -213,6 +216,16 @@ optInputFont :: GSMenuOption a
 optInputFont = Option [] ["inputfont"]
                (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_inputfont = arg}) "font")
                "The font used for the input field"
+
+optOriginX :: GSMenuOption a
+optOriginX = Option "x" []
+             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_originFractX = readFloat arg }) "float")
+             "The horizontal center of the grid, range [0,1]."
+             
+optOriginY :: GSMenuOption a
+optOriginY = Option "y" []
+             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_originFractY = readFloat arg }) "float")
+             "The vertical center of the grid, range [0,1]."
                
 parseElements :: SourceName -> String -> Either ParseError [Element a]
 parseElements = parse $ many element <* eof
