@@ -254,7 +254,7 @@ getGC d fg = do
   dpy <- asks td_display
   screen <- asks td_screen
   cache <- gets td_colorcache
-  (gc, cache') <- io $ G.getGC dpy screen cache d $ G.GCParams { G.gc_fg = fg}
+  (gc, cache') <- io $ G.getGC dpy screen cache d G.GCParams { G.gc_fg = fg}
   modify $ \s -> s { td_colorcache = cache' }
   return gc
 

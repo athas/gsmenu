@@ -54,7 +54,7 @@ setCached cache@(GCCache c) d p gc =
         inner' = M.insert p gc inner
 
 getGC :: MonadIO m => Display -> Screen -> GCCache -> Drawable -> GCParams -> m (GC, GCCache)
-getGC dpy screen cache d p = do
+getGC dpy screen cache d p =
   case cachedGC cache d p of
     Just x -> return (x, cache)
     Nothing -> do
