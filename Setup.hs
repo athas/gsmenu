@@ -55,4 +55,4 @@ gsmenuPostCopy a (CopyFlags { copyDest = cdf, copyVerbosity = vf }) pd lbi =
          setFileMode (bin "gsmenu_path") $ fileMode fs
          putStrLn $ "Installing manpage in " ++ mandir dirs
          createDirectoryIfMissing True $ mandir dirs
-         copyFileVerbose v ("gsmenu.1") (mandir dirs `combine` "gsmenu.1")
+         copyFileVerbose v ("gsmenu.1") (mandir dirs `combine` "man1" `combine` "gsmenu.1")
