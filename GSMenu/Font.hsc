@@ -79,14 +79,13 @@ stringToPixel d s = fromMaybe fallBack <$> io getIt
 -- | Given a fontname returns the font structure. If the font name is
 --  not valid the default font will be loaded and returned.
 initCoreFont :: MonadIO m => Display -> String -> m FontStruct
-initCoreFont dpy s = do
+initCoreFont dpy s =
   io $ catch getIt fallBack
       where getIt    = loadQueryFont dpy s
             fallBack = const $ loadQueryFont dpy "-misc-fixed-*-*-*-*-10-*-*-*-*-*-*-*"
 
 releaseCoreFont :: MonadIO m => Display -> FontStruct -> m ()
-releaseCoreFont dpy fs = do
-  io $ freeFont dpy fs
+releaseCoreFont dpy = io . freeFont dpy
 
 initUtf8Font :: MonadIO m => Display -> String -> m FontSet
 initUtf8Font dpy s = do
@@ -96,8 +95,7 @@ initUtf8Font dpy s = do
             fallBack = const $ createFontSet dpy "-misc-fixed-*-*-*-*-10-*-*-*-*-*-*-*"
 
 releaseUtf8Font :: MonadIO m => Display -> FontSet -> m ()
-releaseUtf8Font dpy fs = do
-  io $ freeFontSet dpy fs
+releaseUtf8Font dpy = io . freeFontSet dpy
 
 -- | When initXMF gets a font name that starts with 'xft:' it switches to the Xft backend
 -- Example: 'xft: Sans-10'
@@ -116,7 +114,7 @@ initXMF dpy s =
 
 releaseXMF :: MonadIO m => Display -> GSMenuFont -> m ()
 #ifdef XFT
-releaseXMF dpy (Xft xftfont) = do
+releaseXMF dpy (Xft xftfont) =
   io $ xftFontClose dpy xftfont
 #endif
 releaseXMF dpy (Utf8 fs) = releaseUtf8Font dpy fs
@@ -136,7 +134,7 @@ textExtentsXMF :: MonadIO m => GSMenuFont -> String -> m (Int32,Int32)
 textExtentsXMF (Utf8 fs) s = do
   let (_,rl)  = wcTextExtents fs s
       ascent  = fi $ - (rect_y rl)
-      descent = fi $ rect_height rl + (fi $ rect_y rl)
+      descent = fi $ rect_height rl + fi (rect_y rl)
   return (ascent, descent)
 textExtentsXMF (Core fs) s = do
   let (_,a,d,_) = textExtents fs s

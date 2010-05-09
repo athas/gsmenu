@@ -162,7 +162,7 @@ elements = do
 
 elementMap :: TwoD a (TwoDElementMap a)
 elementMap = do
-  s        <- get
+  s      <- get
   elmap  <- asks td_elmap
   return $ fromMaybe elmap $ fl_elmap <$> listToMaybe (td_filters s)
 
