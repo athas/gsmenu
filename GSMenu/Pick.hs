@@ -201,20 +201,19 @@ diamondRestrict x y originX originY =
 findInElementMap :: (Eq a) => a -> [(a, b)] -> Maybe (a, b)
 findInElementMap pos = find ((== pos) . fst)
 
-shrinkIt :: String -> [String]
-shrinkIt "" = [""]
-shrinkIt cs = cs : shrinkIt (init cs)
-
-shrinkWhile :: Monad m => (String -> [String])
-            -> (String -> m Bool)
-            -> String -> m String
+shrinkWhile :: Monad m => ([a] -> [[a]])
+            -> ([a] -> m Bool)
+            -> [a] -> m [a]
 shrinkWhile sh p x = sw $ sh x
     where sw [n] = return n
-          sw [] = return ""
+          sw [] = return []
           sw (n:ns) = do cond <- p n
                          if cond
                             then sw ns
                             else return n
+
+textHeight :: GSMenuFont -> String -> IO Dimension
+textHeight font = liftM (fi . uncurry (+)) . textExtentsXMF font
 
 drawWinBox :: Window -> (String, String)
            -> String -> [String]
@@ -223,25 +222,29 @@ drawWinBox :: Window -> (String, String)
 drawWinBox win (fg,bg) text sub x y cw ch = do
   gc <- getGC win bg
   cp <- asks (gp_cellpadding . td_gpconfig)
-  let x' = fi (x+fi cp)
-      y' = fi (y+fi (div ch 2))
   TwoDConf { td_display = dpy, td_elempane = ep,
              td_subfont = subfont, td_font = font }
            <- ask
   io $ do
     fillRectangle dpy win gc x y cw ch
     drawRectangle dpy win (ep_bordergc ep) x y cw ch
-    let stext f = shrinkWhile shrinkIt
+    theight  <- textHeight font text
+    sheights <- mapM (textHeight subfont) sub
+    let room = ch-2*cp-theight
+        (sheight, subs') =
+          fromMaybe (0, []) $
+            find ((<=room) . fst) (zip sheights $ reverse $ inits sub)
+        stext f = shrinkWhile (reverse . inits)
                   (\n -> do size <- textWidthXMF dpy f n
                             return $ size > fi (cw-fi (2*cp)))
-        height f = liftM (uncurry (+)) . textExtentsXMF f
-        putline f voff s = do
+        x' = fi (x+fi cp)
+        y' = fi (y+(fi ch-fi sheight-fi theight) `div` 2)
+        putline f voff (h, s) = do
           s' <- stext f s
-          printStringXMF dpy win f (ep_textgc ep) fg bg x' voff s'
-          height f s'
-    h <- (+y') <$> (height font =<< stext font text)
-    _ <- putline font y' text
-    foldM_ (putline subfont) h sub
+          printStringXMF dpy win f (ep_textgc ep) fg bg x' (voff+fi h) s'
+          return h
+    _ <- putline font y' (theight, text)
+    foldM_ (putline subfont) (y'+fi theight) $ zip (map fi sheights) subs'
 
 drawBoxMask :: Display -> GC -> Pixmap -> Position
             -> Position -> Dimension -> Dimension -> IO ()
