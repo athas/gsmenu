@@ -38,17 +38,19 @@ import GSMenu.Config
 import GSMenu.Pick
 import GSMenu.Util
 
-data AppConfig = AppConfig {
+data AppConfig a = AppConfig {
       cfg_complex   :: Bool
     , cfg_display   :: String
     , cfg_enumerate :: Bool
+    , cfg_gpconfig  :: GPConfig a
   }
 
-defaultConfig :: AppConfig
+defaultConfig :: AppConfig a
 defaultConfig = AppConfig {
                   cfg_complex   = False
                 , cfg_display   = ""
                 , cfg_enumerate = False
+                , cfg_gpconfig  = defaultGPConfig
                 }
 
 main :: IO ()
@@ -64,56 +66,13 @@ main = do
               hPutStrLn stderr $ concat errs ++ usage
               exitFailure
 
-
-options :: [OptDescr (AppConfig -> IO AppConfig)]
-options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult]
-
-optHelp :: OptDescr (AppConfig -> IO AppConfig)
-optHelp = Option "h" ["help"]
-          (NoArg $ \_ -> do
-             hPutStrLn stderr =<< usageStr
-             exitSuccess)
-          "Display this help screen."
-          
-usageStr :: IO String
-usageStr = do
-  prog <- getProgName
-  let header = "Help for " ++ prog ++ " " ++ versionString
-  return $ usageInfo header options
-  
-optVersion :: OptDescr (AppConfig -> IO AppConfig)
-optVersion = Option "v" ["version"]
-             (NoArg $ \_ -> do 
-                hPutStrLn stderr ("gsmenu " ++ versionString ++ ".")
-                hPutStrLn stderr "Copyright (C) Troels Henriksen."
-                exitSuccess)
-             "Print version number."
-             
-versionString :: String
-versionString = "1.1-dev"
-             
-optDisplay :: OptDescr (AppConfig -> IO AppConfig)
-optDisplay = Option "d" ["display"]
-             (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy" )
-             "Specify the X display to connect to."
-             
-optComplex :: OptDescr (AppConfig -> IO AppConfig)
-optComplex = Option "c" ["complex"]
-             (NoArg (\cfg -> return $ cfg { cfg_complex = True }) )
-             "Use complex input format."
-
-optEnumResult :: OptDescr (AppConfig -> IO AppConfig)
-optEnumResult = Option "e" ["enumerate"]
-                (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }) )
-                "Print the result as the (zero-indexed) element number."
-
-runWithCfg :: AppConfig -> IO ()
+runWithCfg :: AppConfig String -> IO ()
 runWithCfg cfg = do 
   dpy   <- setupDisplay $ cfg_display cfg
   let screen = defaultScreenOfDisplay dpy
   elems <- reader stdin valuer
   rect  <- findRectangle dpy (rootWindowOfScreen screen)
-  sel   <- gpick dpy screen rect defaultGPConfig elems
+  sel   <- gpick dpy screen rect (cfg_gpconfig cfg) elems
   case sel of
     Left reason     -> err reason >> exitWith (ExitFailure 1)
     Right Nothing   -> exitWith $ ExitFailure 2
@@ -162,7 +121,71 @@ readElementsC sn h f = do
     Right els -> return $ zipWith mk els [0..]
         where mk elm num = elm {
                 el_data = f (fst $ el_disp elm) num }
-                      
+
+type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
+
+options :: [GSMenuOption a]
+options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult,
+           optFont, optSubFont, optInputFont]
+
+inGPConfig :: (String -> GPConfig a -> GPConfig a)
+            -> String -> AppConfig a -> IO (AppConfig a)
+inGPConfig f arg cfg = return $ cfg { cfg_gpconfig = f arg (cfg_gpconfig cfg) }
+
+optHelp :: GSMenuOption a
+optHelp = Option "h" ["help"]
+          (NoArg $ \_ -> do
+             hPutStrLn stderr =<< usageStr
+             exitSuccess)
+          "Display this help screen."
+          
+usageStr :: IO String
+usageStr = do
+  prog <- getProgName
+  let header = "Help for " ++ prog ++ " " ++ versionString
+  return $ usageInfo header options
+  
+optVersion :: GSMenuOption a
+optVersion = Option "v" ["version"]
+             (NoArg $ \_ -> do 
+                hPutStrLn stderr ("gsmenu " ++ versionString ++ ".")
+                hPutStrLn stderr "Copyright (C) Troels Henriksen."
+                exitSuccess)
+             "Print version number."
+             
+versionString :: String
+versionString = "1.1-dev"
+             
+optDisplay :: GSMenuOption a
+optDisplay = Option "d" ["display"]
+             (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy" )
+             "Specify the X display to connect to."
+             
+optComplex :: GSMenuOption a
+optComplex = Option "c" ["complex"]
+             (NoArg (\cfg -> return $ cfg { cfg_complex = True }) )
+             "Use complex input format."
+
+optEnumResult :: GSMenuOption a
+optEnumResult = Option "e" ["enumerate"]
+                (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }) )
+                "Print the result as the (zero-indexed) element number."
+
+optFont :: GSMenuOption a
+optFont = Option [] ["font"]
+          (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_font = arg }) "font")
+          "The font used for printing names of elements"
+
+optSubFont :: GSMenuOption a
+optSubFont = Option [] ["subfont"]
+             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_subfont = arg}) "font")
+             "The font used for printing extra lines in elements"
+
+optInputFont :: GSMenuOption a
+optInputFont = Option [] ["inputfont"]
+               (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_inputfont = arg}) "font")
+               "The font used for the input field"
+               
 parseElements :: SourceName -> String -> Either ParseError [Element a]
 parseElements = parse $ many element <* eof
 

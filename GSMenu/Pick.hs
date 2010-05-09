@@ -54,6 +54,7 @@ data GPConfig a = GPConfig {
     , gp_cellwidth    :: Dimension
     , gp_cellpadding  :: Dimension
     , gp_font         :: String
+    , gp_subfont      :: String
     , gp_inputfont    :: String
     , gp_keymap       :: KeyMap a
     , gp_originFractX :: Double
@@ -135,6 +136,7 @@ data TwoDConf a = TwoDConf {
     , td_display  :: Display
     , td_screen   :: Screen
     , td_font     :: GSMenuFont
+    , td_subfont  :: GSMenuFont
     , td_elms     :: [Element a]
     , td_elmap    :: TwoDElementMap a
     }
@@ -221,20 +223,21 @@ drawWinBox dpy win font bc (fg,bg) text sub cp x y cw ch = do
   gc <- getGC win bg
   bordergc <- getGC win bc
   textgc <- asks (ep_textgc . td_elempane)
+  subfont <- asks td_subfont
   io $ do
     fillRectangle dpy win gc x y cw ch
     drawRectangle dpy win bordergc x y cw ch
-    let stext = shrinkWhile shrinkIt
-                (\n -> do size <- textWidthXMF dpy font n
-                          return $ size > fi (cw-fi (2*cp)))
-        height = liftM (uncurry (+)) . textExtentsXMF font
-        putline voff s = do
-          s' <- stext s
-          printStringXMF dpy win font textgc fg bg x' voff s'
-          height s'
-    h <- (+y') <$> (height =<< stext text)
-    _ <- putline y' text
-    foldM_ putline h sub
+    let stext f = shrinkWhile shrinkIt
+                  (\n -> do size <- textWidthXMF dpy f n
+                            return $ size > fi (cw-fi (2*cp)))
+        height f = liftM (uncurry (+)) . textExtentsXMF f
+        putline f voff s = do
+          s' <- stext f s
+          printStringXMF dpy win f textgc fg bg x' voff s'
+          height f s'
+    h <- (+y') <$> (height font =<< stext font text)
+    _ <- putline font y' text
+    foldM_ (putline subfont) h sub
     where x' = fi (x+fi cp)
           y' = fi (y+fi (div ch 2))
 
@@ -634,6 +637,7 @@ gpick dpy screen rect gpconfig ellist = do
   status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
   grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
   font      <- initXMF dpy (gp_font gpconfig)
+  subfont   <- initXMF dpy (gp_subfont gpconfig)
   if status /= grabSuccess then return $ Left "Could not establish keyboard grab"
     else do
       let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
@@ -653,6 +657,7 @@ gpick dpy screen rect gpconfig ellist = do
                                        , td_display   = dpy
                                        , td_screen    = screen
                                        , td_font      = font
+                                       , td_subfont   = subfont
                                        , td_elmap     = elmap
                                        , td_elms      = ellist }
                               TwoDState { td_curpos     = head coords

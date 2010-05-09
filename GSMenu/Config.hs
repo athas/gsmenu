@@ -30,6 +30,7 @@ defaultGPConfig = GPConfig {
                   , gp_cellwidth = 130
                   , gp_cellpadding = 10
                   , gp_font = "xft:Sans-8"
+                  , gp_subfont = "xft:Sans-7"
                   , gp_inputfont = "xft:Monospace-14"
                   , gp_keymap = defaultGPNav
                   , gp_originFractX = 1/2

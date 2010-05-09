@@ -8,6 +8,9 @@ gsmenu \- grid menu
 .RB [ \-e]
 .RB [ \-h ]
 .RB [ \-v ]
+[\fB\-\-font=\fR\fIfont\fR]
+[\fB\-\-subfont=\fR\fIfont\fR]
+[\fB\-\-inputfont=\fR\fIfont\fR]
 .SH DESCRIPTION
 .SS Overview
 gsmenu is a generic grid menu for X11, originally a port of the
@@ -23,6 +26,17 @@ makes gsmenu accept complex input format (see below).
 .B \-e
 print the selected item as an index into the (0-indexed) sequence of
 input elements.
+.TP
+.B \-\-font
+The first line of elements is printed in this font.  Both traditional
+X11-font-strings and XFT-fonts are accepted, the latter when prefixed
+with "xft:" (for example "xft:URW Bookman L-10").
+.TP
+.B \-\-subfont
+As \-\-font, but used for secondary lines of elements.
+.TP
+.B \-\-inputfont
+As \-\-font, but affects the user input text field.
 .TP
 .B \-h
 prints command option summary to standard output, then exits.
