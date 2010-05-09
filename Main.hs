@@ -126,11 +126,21 @@ type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
 
 options :: [GSMenuOption a]
 options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult,
-           optFont, optSubFont, optInputFont]
+           optFont, optSubFont, optInputFont,
+           optCellHeight, optCellWidth, optCellPadding]
 
 inGPConfig :: (String -> GPConfig a -> GPConfig a)
             -> String -> AppConfig a -> IO (AppConfig a)
 inGPConfig f arg cfg = return $ cfg { cfg_gpconfig = f arg (cfg_gpconfig cfg) }
+
+tryRead :: Read a => (String -> String) -> String -> a
+tryRead ef s = case reads s of
+                [(x, "")] -> x
+                _         -> error $ ef s
+
+readInt :: (Integral a, Read a) => String -> a
+readInt = tryRead $ \s ->
+  quote s ++ " is not an integer."
 
 optHelp :: GSMenuOption a
 optHelp = Option "h" ["help"]
@@ -170,6 +180,24 @@ optEnumResult :: GSMenuOption a
 optEnumResult = Option "e" ["enumerate"]
                 (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }) )
                 "Print the result as the (zero-indexed) element number."
+
+optCellHeight :: GSMenuOption a
+optCellHeight = Option "h" ["cellheight"]
+                (ReqArg (inGPConfig $ \arg gpc ->
+                          gpc { gp_cellheight = readInt arg }) "height")
+                "The height of each element cell"
+
+optCellWidth :: GSMenuOption a
+optCellWidth = Option "w" ["cellwidth"]
+                (ReqArg (inGPConfig $ \arg gpc ->
+                          gpc { gp_cellwidth = readInt arg }) "width")
+                "The width of each element cell"
+
+optCellPadding :: GSMenuOption a
+optCellPadding = Option "p" ["cellpadding"]
+                 (ReqArg (inGPConfig $ \arg gpc ->
+                           gpc { gp_cellpadding = readInt arg }) "padding")
+                 "The inner padding of each element cell"
 
 optFont :: GSMenuOption a
 optFont = Option [] ["font"]

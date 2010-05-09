@@ -6,6 +6,9 @@ gsmenu \- grid menu
 [\fB\-d=\fR\fIdisplay\fR]
 [\fB\-c\fR]
 [\fB\-e\fR]
+[\fB\-h\fR]
+[\fB\-w\fR]
+[\fB\-p\fR]
 [\fB\-\-font=\fR\fIfont\fR]
 [\fB\-\-subfont=\fR\fIfont\fR]
 [\fB\-\-inputfont=\fR\fIfont\fR]
@@ -14,7 +17,8 @@ gsmenu \- grid menu
 .SH DESCRIPTION
 .SS Overview
 gsmenu is a generic grid menu for X11, originally a port of the
-GridSelect contrib for XMonad.
+GridSelect contrib for XMonad.  It displays elements as a grid of
+rectangular cells.
 .SS Options
 .TP
 .B \-d
@@ -26,6 +30,15 @@ makes gsmenu accept complex input format (see below).
 .B \-e
 print the selected item as an index into the (0-indexed) sequence of
 input elements.
+.TP
+.B \-h
+The height of each cell.
+.TP
+.B \-w
+The width of each cell.
+.TP
+.B \-p
+The inner text padding of each cell.
 .TP
 .B \-\-font
 The first line of elements is printed in this font.  Both traditional
