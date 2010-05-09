@@ -200,22 +200,22 @@ optCellPadding :: GSMenuOption a
 optCellPadding = Option "p" ["cellpadding"]
                  (ReqArg (inGPConfig $ \arg gpc ->
                            gpc { gp_cellpadding = readInt arg }) "padding")
-                 "The inner padding of each element cell"
+                 "The inner padding of each element cell."
 
 optFont :: GSMenuOption a
 optFont = Option [] ["font"]
           (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_font = arg }) "font")
-          "The font used for printing names of elements"
+          "The font used for printing names of elements."
 
 optSubFont :: GSMenuOption a
 optSubFont = Option [] ["subfont"]
              (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_subfont = arg}) "font")
-             "The font used for printing extra lines in elements"
+             "The font used for printing extra lines in elements."
 
 optInputFont :: GSMenuOption a
 optInputFont = Option [] ["inputfont"]
                (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_inputfont = arg}) "font")
-               "The font used for the input field"
+               "The font used for the input field."
 
 optOriginX :: GSMenuOption a
 optOriginX = Option "x" []
@@ -225,7 +225,7 @@ optOriginX = Option "x" []
 optOriginY :: GSMenuOption a
 optOriginY = Option "y" []
              (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_originFractY = readFloat arg }) "float")
-             "The vertical center of the grid, range [0,1]."
+             "The vertical center of the grid, range [0,1]"
                
 parseElements :: SourceName -> String -> Either ParseError [Element a]
 parseElements = parse $ many element <* eof
@@ -233,8 +233,8 @@ parseElements = parse $ many element <* eof
 blankElem :: Element a
 blankElem = Element {
               el_colors = ("black", "white")
-            , el_data   = error "Element without data"
-            , el_disp   = error "Element without display"
+            , el_data   = error "Element without data."
+            , el_disp   = error "Element without display."
             , el_tags   = []
             }
 
