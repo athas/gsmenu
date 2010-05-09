@@ -57,7 +57,11 @@ name="quote ""this"" please" tags="bar" "baz" bg="red"
 The following keys are defined:
 .TP
 .B name
-The string that will be displayed in the grid.
+The string that will be displayed in the grid.  The value can also be
+a list, in which case each part of the list will be printed as a line
+by itself (note that there will probably not be room for more than two
+lines).  Also, only the first line will count as the "name" as far as
+selection output is concerned.
 .TP
 .B fg
 The foreground (text) colour of the element (#RGB, #RRGGBB, and color

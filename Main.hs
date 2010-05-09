@@ -148,7 +148,7 @@ readElements h f = do
       where mk line num = Element
                           { el_colors = ("black", "white")
                           , el_data   = f line num
-                          , el_disp   = line 
+                          , el_disp   = (line, [])
                           , el_tags   = [] }
                           
 readElementsC :: MonadIO m => SourceName
@@ -161,7 +161,7 @@ readElementsC sn h f = do
     Left  e   -> error $ show e
     Right els -> return $ zipWith mk els [0..]
         where mk elm num = elm {
-                el_data = f (el_disp elm) num }
+                el_data = f (fst $ el_disp elm) num }
                       
 parseElements :: SourceName -> String -> Either ParseError [Element a]
 parseElements = parse $ many element <* eof
@@ -193,8 +193,8 @@ element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
     where tags (("tags",ts):ls) = ts ++ tags ls
           tags ((_,_):ls)       = tags ls
           tags []               = []
-          procKv elm ("name", [val]) =
-            return elm { el_disp = val }
+          procKv elm ("name", val : more) =
+            return elm { el_disp = (val, more) }
           procKv _   ("name", _) = badval "name"
           procKv elm ("fg", [val]) =
             return elm {

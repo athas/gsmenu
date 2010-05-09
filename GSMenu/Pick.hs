@@ -66,7 +66,7 @@ type TwoDPosition = (Integer, Integer)
 data Element a = Element {
       el_colors :: (String, String)
     , el_data   :: a
-    , el_disp   :: String
+    , el_disp   :: (String, [String])
     , el_tags   :: [String]
     }
 
@@ -102,7 +102,9 @@ data Filter = Include String
 passes :: Filter -> Element a -> Bool
 passes (Include s) elm =
   any (isInfixOf $ downcase s) fields
-    where fields = map downcase (el_disp elm : el_tags elm)
+    where fields = map downcase (fst (el_disp elm) 
+                                 : snd (el_disp elm) 
+                                 ++ el_tags elm)
 passes (Exclude s) elm = not $ passes (Include s) elm
 passes (Running s) elm = passes (Include s) elm
 
@@ -212,22 +214,29 @@ shrinkWhile sh p x = sw $ sh x
                             else return n
 
 drawWinBox :: Display -> Window -> GSMenuFont -> String
-           -> (String, String) -> String -> Dimension
-           -> Position -> Position -> Dimension -> Dimension
+           -> (String, String) -> String -> [String]
+           -> Dimension -> Position -> Position -> Dimension -> Dimension
            -> TwoD a ()
-drawWinBox dpy win font bc (fg,bg) text cp x y cw ch = do
+drawWinBox dpy win font bc (fg,bg) text sub cp x y cw ch = do
   gc <- getGC win bg
   bordergc <- getGC win bc
   textgc <- asks (ep_textgc . td_elempane)
   io $ do
     fillRectangle dpy win gc x y cw ch
     drawRectangle dpy win bordergc x y cw ch
-    stext <- shrinkWhile shrinkIt
-             (\n -> do size <- textWidthXMF dpy font n
-                       return $ size > fi (cw-fi (2*cp)))
-             text
-    printStringXMF dpy win font textgc fg bg
-      (fi (x+fi cp)) (fi (y+fi (div ch 2))) stext
+    let stext = shrinkWhile shrinkIt
+                (\n -> do size <- textWidthXMF dpy font n
+                          return $ size > fi (cw-fi (2*cp)))
+        height = liftM (uncurry (+)) . textExtentsXMF font
+        putline voff s = do
+          s' <- stext s
+          printStringXMF dpy win font textgc fg bg x' voff s'
+          height s'
+    h <- (+y') <$> (height =<< stext text)
+    _ <- putline y' text
+    foldM_ putline h sub
+    where x' = fi (x+fi cp)
+          y' = fi (y+fi (div ch 2))
 
 drawBoxMask :: Display -> GC -> Pixmap -> Position
             -> Position -> Dimension -> Dimension -> IO ()
@@ -288,8 +297,8 @@ redrawElements elementmap = do
   win     <- asks (ep_win . td_elempane)
   curpos  <- gets td_curpos
   let update ((x,y),Element { el_colors = colors
-                            , el_disp = text }) =
-        drawWinBox dpy win font bc colors' text padding
+                            , el_disp = (text, sub) }) =
+        drawWinBox dpy win font bc colors' text sub padding
             where colors' | curpos == (x,y) =
                               ("black", "#faff69")
                           | otherwise = colors
