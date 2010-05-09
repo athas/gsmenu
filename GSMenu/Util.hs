@@ -18,6 +18,8 @@ module GSMenu.Util
     , upcase
     , downcase
     , hsv2rgb
+    , wrap
+    , quote
     ) where
 
 import Control.Monad.Trans
@@ -62,3 +64,11 @@ hsv2rgb (h,s,v) =
          4 -> (t,p,v)
          5 -> (v,p,q)
          _ -> error "The world is ending. x mod a >= a."
+
+-- | Prepend and append first argument to second argument.
+wrap :: String -> String -> String
+wrap x y = x ++ y ++ x
+
+-- | Put double quotes around the given string.
+quote :: String -> String
+quote = wrap "\""

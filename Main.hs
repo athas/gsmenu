@@ -128,7 +128,7 @@ runWithCfg cfg = do
 setupDisplay :: String -> IO Display
 setupDisplay dstr =
   openDisplay dstr `Prelude.catch` \_ ->
-    error $ "Cannot open display '" ++ dstr ++ "'."
+    error $ "Cannot open display \"" ++ dstr ++ "\"."
 
 findRectangle :: Display -> Window -> IO Rectangle
 findRectangle dpy rootw = do
@@ -207,8 +207,8 @@ element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
           procKv elm ("tags",val) =
             return elm { el_tags = el_tags elm ++ filter (/="") val }
           procKv _ (k, _) = nokey k
-          badval = parserFail . ("Bad value for field " ++)
-          nokey  = parserFail . ("Unknown key " ++)
+          badval = parserFail . ("Bad value for field " ++) . quote
+          nokey  = parserFail . ("Unknown key " ++) . quote
 
 kvPair :: GenParser Char u (String, [String])
 kvPair =
