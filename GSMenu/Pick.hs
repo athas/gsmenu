@@ -140,6 +140,7 @@ data TwoDConf a = TwoDConf {
     , td_subfont  :: GSMenuFont
     , td_elms     :: [Element a]
     , td_elmap    :: TwoDElementMap a
+    , td_scaffold :: [TwoDPosition]
     }
 
 newtype TwoD a b = TwoD (ReaderT (TwoDConf a)
@@ -167,17 +168,7 @@ elementMap = do
   return $ fromMaybe elmap $ fl_elmap <$> listToMaybe (td_filters s)
 
 elementGrid :: [Element a] -> TwoD a (TwoDElementMap a)
-elementGrid elms = do
-  gpconfig <- asks td_gpconfig
-  rwidth   <- asks (ep_width . td_elempane)
-  rheight  <- asks (ep_height . td_elempane)
-  let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
-      restrictX = floor $ restriction (fi rwidth) gp_cellwidth
-      restrictY = floor $ restriction (fi rheight) gp_cellheight
-      originPosX = floor $ (gp_originFractX gpconfig - (1/2)) * 2 * fromIntegral restrictX
-      originPosY = floor $ (gp_originFractY gpconfig - (1/2)) * 2 * fromIntegral restrictY
-      coords = diamondRestrict restrictX restrictY originPosX originPosY
-  return (zip coords $ map select elms)
+elementGrid elms = flip zip (map select elms) <$> asks td_scaffold
   
 select :: Element a -> Element (TwoD a (Maybe a))
 select elm = elm { el_data = return $ Just $ el_data elm }
@@ -338,7 +329,6 @@ adjustPosition = do
   when (not $ null coords) $
     modify (\s -> s { td_curpos = minimumBy (comparator s) coords})
     where comparator s = comparing $ distTo $ td_curpos s
-              
 
 changingState :: TwoD a b -> TwoD a b
 changingState f = do
@@ -424,44 +414,27 @@ moveTo (nx, ny) = do
 distTo :: TwoDPosition -> TwoDPosition -> Integer
 distTo (x1, y1) (x2, y2) = abs (x2-x1) + abs (y2-y1)
 
-dist :: TwoDPosition -> Integer
-dist = distTo (0,0)
+visibleGrid :: TwoD a [TwoDPosition]
+visibleGrid =
+  liftM2 intersect (map fst <$> elementMap) $ asks td_scaffold
 
-visibleRing :: TwoDElementMap a -> Integer -> [TwoDPosition]
-visibleRing elmap r =
-  diamondLayer (r `mod` (maxdist + 1)) `intersect` map fst elmap
-    where maxdist = foldr (max . dist . fst) 0 elmap
-
-skipalong :: ([TwoDPosition] -> TwoDPosition) 
-          -> (Integer -> Integer)
-          -> ([TwoDPosition] -> TwoDPosition)
-          -> (([TwoDPosition], [TwoDPosition]) -> TwoDPosition)
+skipalong :: ([TwoDPosition] -> [TwoDPosition]) 
           -> TwoD a ()
-skipalong pf nif sf nf = do
-  pos    <- gets td_curpos
-  elmap  <- elementMap
-  let d      = dist pos
-      circle = visibleRing elmap d
-      pos'
-       | pos == pf circle =
-           sf $ visibleRing elmap $ nif d
-       | otherwise =
-           nf $ break (==pos) circle
-  moveTo pos'
+skipalong f = do
+  curpos <- gets td_curpos
+  grid   <- visibleGrid
+  let findnext (p:tl@(p':_))
+          | p == curpos = Just p'
+          | otherwise = findnext tl
+      findnext _ = Nothing
+  when (curpos `elem` grid) $ 
+    moveTo $ fromMaybe curpos $ findnext $ cycle $ f grid
 
 next :: TwoD a ()
-next = skipalong last (+1) jump forward
-    where jump (p:_) = p
-          jump _     = (0,0)
-          forward (_, _:p:_) = p
-          forward _          = (0,0)
+next = skipalong id
 
 prev :: TwoD a ()
-prev = skipalong head (+(-1)) jump forward
-    where jump [] = (0,0) -- will never happen
-          jump l  = last l
-          forward    ([], _) = (0,0)
-          forward    (l, _)  = last l
+prev = skipalong reverse
 
 lineMove :: ((TwoDPosition -> TwoDPosition -> Ordering) 
              -> [TwoDPosition] -> TwoDPosition)
@@ -676,7 +649,8 @@ gpick dpy screen rect gpconfig ellist = do
                                        , td_font      = font
                                        , td_subfont   = subfont
                                        , td_elmap     = elmap
-                                       , td_elms      = ellist }
+                                       , td_elms      = ellist
+                                       , td_scaffold  = coords }
                               TwoDState { td_curpos     = head coords
                                         , td_colorcache = G.empty
                                         , td_tbuffer    = "" 
