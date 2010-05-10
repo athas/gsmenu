@@ -1,6 +1,6 @@
 name:               gsmenu
 version:            1.2-dev
-homepage:           http://sigkill.dk
+homepage:           http://sigkill.dk/programs/gsmenu
 synopsis:           A visual generic menu
 description:
     Standalone port of XMonadContrib's GridSelect.
