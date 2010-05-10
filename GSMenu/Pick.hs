@@ -326,12 +326,12 @@ updateTextInput = do
 adjustPosition :: TwoD a ()
 adjustPosition = do
   coords <- (map fst <$> elementMap)
-  when (not $ null coords) $
+  unless (null coords) $
     modify (\s -> s { td_curpos = minimumBy (comparator s) coords})
-    where comparator s = comparing $ distTo $ td_curpos s
+    where comparator = comparing . distTo . td_curpos
 
 changingState :: TwoD a b -> TwoD a b
-changingState f = do
+changingState f =
   f <* adjustPosition
     <* redrawAllElements
     <* updateTextInput
