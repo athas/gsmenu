@@ -332,9 +332,17 @@ updateTextInput = do
           buildStr (Running str:fs) = buildStr fs ++ take 1 (reverse str)
           buildStr _                = ""
 
+adjustPosition :: TwoD a ()
+adjustPosition = do
+  coords <- (map fst <$> elementMap)
+  when (not $ null coords) $
+    modify (\s -> s { td_curpos = minimumBy (comparator s) coords})
+    where comparator s = comparing $ distTo $ td_curpos s
+              
+
 changingState :: TwoD a b -> TwoD a b
-changingState f =
-  f <* modify (\s -> s { td_curpos = (0,0) })
+changingState f = do
+  f <* adjustPosition
     <* redrawAllElements
     <* updateTextInput
 
@@ -412,9 +420,12 @@ moveTo :: TwoDPosition -> TwoD a ()
 moveTo (nx, ny) = do
   (x,y) <- gets td_curpos
   move (nx-x, ny-y)
+  
+distTo :: TwoDPosition -> TwoDPosition -> Integer
+distTo (x1, y1) (x2, y2) = abs (x2-x1) + abs (y2-y1)
 
 dist :: TwoDPosition -> Integer
-dist (x,y) = abs x + abs y
+dist = distTo (0,0)
 
 visibleRing :: TwoDElementMap a -> Integer -> [TwoDPosition]
 visibleRing elmap r =
