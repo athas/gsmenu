@@ -185,19 +185,19 @@ optEnumResult = Option "e" ["enumerate"]
                 "Print the result as the (zero-indexed) element number."
 
 optCellHeight :: GSMenuOption a
-optCellHeight = Option "h" ["cellheight"]
+optCellHeight = Option [] ["cellheight"]
                 (ReqArg (inGPConfig $ \arg gpc ->
                           gpc { gp_cellheight = readInt arg }) "height")
                 "The height of each element cell"
 
 optCellWidth :: GSMenuOption a
-optCellWidth = Option "w" ["cellwidth"]
+optCellWidth = Option [] ["cellwidth"]
                 (ReqArg (inGPConfig $ \arg gpc ->
                           gpc { gp_cellwidth = readInt arg }) "width")
                 "The width of each element cell"
 
 optCellPadding :: GSMenuOption a
-optCellPadding = Option "p" ["cellpadding"]
+optCellPadding = Option [] ["cellpadding"]
                  (ReqArg (inGPConfig $ \arg gpc ->
                            gpc { gp_cellpadding = readInt arg }) "padding")
                  "The inner padding of each element cell."
