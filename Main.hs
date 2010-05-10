@@ -167,7 +167,7 @@ optVersion = Option "v" ["version"]
              "Print version number."
              
 versionString :: String
-versionString = "1.1"
+versionString = "1.2-dev"
              
 optDisplay :: GSMenuOption a
 optDisplay = Option "d" ["display"]
