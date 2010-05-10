@@ -71,7 +71,7 @@ data Element a = Element {
     , el_tags   :: [String]
     }
 
-type TwoDElement a    = (TwoDPosition, Element (TwoD a (Maybe a)))
+type TwoDElement a    = (TwoDPosition, Element a)
 type TwoDElementMap a = [TwoDElement a]
 
 data ElemPane = ElemPane {
@@ -119,7 +119,6 @@ isRunning _           = False
 
 data FilterState a = FilterState {
       fl_filter :: Filter
-    , fl_elmap  :: TwoDElementMap a
     , fl_elms   :: [Element a]
   }
 
@@ -162,16 +161,7 @@ elements = do
   return $ fromMaybe allelms $ fl_elms <$> listToMaybe (td_filters s)
 
 elementMap :: TwoD a (TwoDElementMap a)
-elementMap = do
-  s      <- get
-  elmap  <- asks td_elmap
-  return $ fromMaybe elmap $ fl_elmap <$> listToMaybe (td_filters s)
-
-elementGrid :: [Element a] -> TwoD a (TwoDElementMap a)
-elementGrid elms = flip zip (map select elms) <$> asks td_scaffold
-  
-select :: Element a -> Element (TwoD a (Maybe a))
-select elm = elm { el_data = return $ Just $ el_data elm }
+elementMap = liftM2 zip (asks td_scaffold) elements
 
 diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
 diamondLayer 0 = [(0,0)]
@@ -192,6 +182,9 @@ diamondRestrict x y originX originY =
 findInElementMap :: (Eq a) => a -> [(a, b)] -> Maybe (a, b)
 findInElementMap pos = find ((== pos) . fst)
 
+textHeight :: GSMenuFont -> String -> IO Dimension
+textHeight font = liftM (fi . uncurry (+)) . textExtentsXMF font
+
 shrinkWhile :: Monad m => ([a] -> [[a]])
             -> ([a] -> m Bool)
             -> [a] -> m [a]
@@ -203,8 +196,11 @@ shrinkWhile sh p x = sw $ sh x
                             then sw ns
                             else return n
 
-textHeight :: GSMenuFont -> String -> IO Dimension
-textHeight font = liftM (fi . uncurry (+)) . textExtentsXMF font
+stopText :: Display -> GSMenuFont -> Dimension -> String -> IO String
+stopText dpy f mw =
+  shrinkWhile (reverse . inits)
+  (\n -> do size <- textWidthXMF dpy f n
+            return $ size > fi mw)
 
 drawWinBox :: Window -> (String, String)
            -> String -> [String]
@@ -225,22 +221,18 @@ drawWinBox win (fg,bg) text sub x y cw ch = do
         (sheight, subs') =
           fromMaybe (0, []) $
             find ((<=room) . fst) (zip sheights $ reverse $ inits sub)
-        stext f = shrinkWhile (reverse . inits)
-                  (\n -> do size <- textWidthXMF dpy f n
-                            return $ size > fi (cw-fi (2*cp)))
-        x' = fi (x+fi cp)
-        y' = fi (y+(fi ch-fi sheight-fi theight) `div` 2)
-        putline f voff (h, s) = do
-          s' <- stext f s
-          printStringXMF dpy win f (ep_textgc ep) fg bg x' (voff+fi h) s'
-          return h
-    _ <- putline font y' (theight, text)
-    foldM_ (putline subfont) (y'+fi theight) $ zip (map fi sheights) subs'
+        x' = fi (x+fi cp) :: Position
+        y' = y+(fi ch-fi sheight-fi theight) `div` 2 + fi theight :: Position
+        ys = scanl1 (+) $ map ((+y') . fi) sheights
+        putline f voff s = do
+          stopText dpy f (cw-fi (2*cp)) s >>=
+            printStringXMF dpy win f (ep_textgc ep) fg bg x' voff
+    _ <- putline font y' text
+    zipWithM_ (putline subfont) ys subs'
 
 drawBoxMask :: Display -> GC -> Pixmap -> Position
             -> Position -> Dimension -> Dimension -> IO ()
-drawBoxMask dpy gc pm x y w h = do
-  setForeground dpy gc 1
+drawBoxMask dpy gc pm x y w h =
   fillRectangle dpy pm gc x y w h
 
 getGC :: Drawable -> String -> TwoD a GC
@@ -339,11 +331,9 @@ changingState f =
 pushFilter :: Filter -> TwoD a ()
 pushFilter f = do
   elms' <- apply f <$> elements
-  elmap <- elementGrid elms'
   modify $ \s -> s {
     td_filters = FilterState { fl_filter = f
-                             , fl_elms   = elms'
-                             , fl_elmap  = elmap } : td_filters s }
+                             , fl_elms   = elms' } : td_filters s }
 
 popFilter :: TwoD a ()
 popFilter =
@@ -476,6 +466,11 @@ eventLoop = do
     return (ks,s,ev)
   handle (fromMaybe xK_VoidSymbol keysym,string) event
 
+selectAt :: TwoDPosition -> TwoD a (Maybe a)
+selectAt pos =
+  lookup pos <$> elementMap >>=
+  maybe eventLoop (return . Just . el_data)
+
 cleanMask :: KeyMask -> KeyMask
 cleanMask km = complement (numLockMask
                            .|. lockMask) .&. km
@@ -485,12 +480,8 @@ cleanMask km = complement (numLockMask
 handle :: (KeySym, String) -> Event -> TwoD a (Maybe a)
 handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
     | t == keyPress && ks == xK_Escape = return Nothing
-    | t == keyPress && ks == xK_Return = do
-      pos <- gets td_curpos
-      elmap <- elementMap
-      case lookup pos elmap of
-        Nothing  -> eventLoop
-        Just elm -> maybe eventLoop (return . Just) =<< el_data elm
+    | t == keyPress && ks == xK_Return =
+        selectAt =<< gets td_curpos
     | t == keyPress = do
       keymap <- asks (gp_keymap . td_gpconfig)
       fromMaybe unbound $ M.lookup (m',ks) keymap
@@ -501,17 +492,13 @@ handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
 
 handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
     | t == buttonRelease = do
-      elmap <- elementMap
       ch    <- asks (gp_cellheight . td_gpconfig)
       cw    <- asks (gp_cellwidth . td_gpconfig)
       w     <- asks (ep_width . td_elempane)
       h     <- asks (ep_height . td_elempane)
       let gridX = fi $ (fi x - (w - cw) `div` 2) `div` cw
           gridY = fi $ (fi y - (h - ch) `div` 2) `div` ch
-      case lookup (gridX,gridY) elmap of
-        Nothing  -> eventLoop
-        Just elm ->
-          maybe eventLoop (return . Just) =<< el_data elm
+      selectAt (gridX, gridY)
     | otherwise = eventLoop
 
 handle _ (ExposeEvent { ev_count = 0 }) = redrawAllElements >> eventLoop
@@ -633,11 +620,10 @@ gpick dpy screen rect gpconfig ellist = do
       let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
           restrictX = floor $ restriction (fi rwidth) gp_cellwidth
           restrictY = floor $ restriction (fi rheight) gp_cellheight
-          originPosX = floor $ (gp_originFractX gpconfig - (1/2)) * 2 * fromIntegral restrictX
-          originPosY = floor $ (gp_originFractY gpconfig - (1/2)) * 2 * fromIntegral restrictY
+          originPosX = floor $ (gp_originFractX gpconfig - (1/2)) * 2 * fi restrictX
+          originPosY = floor $ (gp_originFractY gpconfig - (1/2)) * 2 * fi restrictY
           coords = diamondRestrict restrictX restrictY originPosX originPosY
-          boxelms = map select ellist
-          elmap  = zip coords boxelms
+          elmap  = zip coords ellist
       (selectedElement, s) <- runTwoD (do updateTextInput
                                           redrawAllElements 
                                           eventLoop)
