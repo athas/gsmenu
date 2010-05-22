@@ -7,14 +7,14 @@ gsmenu
 [\fB\-d=\fIdisplay\fR]
 [\fB\-c\fR]
 [\fB\-e\fR]
-[\fB\-\-cellheight \fIheight\fR]
-[\fB\-\-cellwidth \fIwidth\fR\fR]
-[\fB\-\-cellpadding \fIpadding\fR]
+[\fB\-cellheight \fIheight\fR]
+[\fB\-cellwidth \fIwidth\fR\fR]
+[\fB\-cellpadding \fIpadding\fR]
 [\fB\-x \fIposition\fR]
 [\fB\-y \fIposition\fR]
-[\fB\-\-font=\fIfont\fR]
-[\fB\-\-subfont=\fIfont\fR]
-[\fB\-\-inputfont=\fIfont\fR]
+[\fB\-font=\fIfont\fR]
+[\fB\-subfont=\fIfont\fR]
+[\fB\-inputfont=\fIfont\fR]
 [\fB\-h\fR]
 [\fB\-v\fR]
 .SH DESCRIPTION
@@ -24,7 +24,7 @@ GridSelect contrib for XMonad.  It displays elements as a grid of
 rectangular cells.
 .SS Options
 .TP
-.B \-d
+.B \-dpy
 specifies the X server to contact.
 .TP
 .B \-c
@@ -34,13 +34,13 @@ makes gsmenu accept complex input format (see below).
 print the selected item as an index into the (0-indexed) sequence of
 input elements.
 .TP
-.B \-\-cellheight
+.B \-cellheight
 The height of each cell in pixels.
 .TP
-.B \-\-cellwidth
+.B \-cellwidth
 The width of each cell in pixels.
 .TP
-.B \-\-cellpadding
+.B \-cellpadding
 The inner text padding of each cell in pixels.
 .TP
 .B \-x
@@ -50,16 +50,16 @@ screen width.
 .B \-y
 As \fB\-x\fR, but sets the vertical position.
 .TP
-.B \-\-font
+.B \-font
 The first line of elements is printed in this font.  Both traditional
 X11-font-strings and XFT-fonts are accepted, the latter when prefixed
 with "xft:" (for example "xft:URW Bookman L-10").
 .TP
-.B \-\-subfont
-As \-\-font, but used for secondary lines of elements.
+.B \-subfont
+As \-font, but used for secondary lines of elements.
 .TP
-.B \-\-inputfont
-As \-\-font, but affects the user input text field.
+.B \-inputfont
+As \-font, but affects the user input text field.
 .TP
 .B \-h
 prints command option summary to standard output, then exits.

@@ -24,7 +24,7 @@ import Data.Word (Word8)
 import Graphics.X11.Xlib hiding (refreshKeyboardMapping)
 import Graphics.X11.Xinerama
 
-import System.Console.GetOpt
+import System.Console.GetFlag
 import System.Environment
 import System.Exit
 import System.IO
@@ -124,12 +124,6 @@ readElementsC sn h f = do
 
 type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
 
-options :: [GSMenuOption a]
-options = [optHelp, optVersion, optDisplay, optComplex, optEnumResult,
-           optFont, optSubFont, optInputFont,
-           optCellHeight, optCellWidth, optCellPadding,
-           optOriginX, optOriginY]
-
 inGPConfig :: (String -> GPConfig a -> GPConfig a)
             -> String -> AppConfig a -> IO (AppConfig a)
 inGPConfig f arg cfg = return $ cfg { cfg_gpconfig = f arg (cfg_gpconfig cfg) }
@@ -145,87 +139,67 @@ readInt = tryRead $ (++ " is not an integer.") . quote
 readFloat :: (Fractional a, Read a) => String -> a
 readFloat = tryRead $ (++ " is not a decimal fraction.") . quote
 
-optHelp :: GSMenuOption a
-optHelp = Option "h" ["help"]
-          (NoArg $ \_ -> do
-             hPutStrLn stderr =<< usageStr
-             exitSuccess)
-          "Display this help screen."
-          
 usageStr :: IO String
 usageStr = do
   prog <- getProgName
-  let header = "Help for " ++ prog ++ " " ++ versionString
+  let header = "Help for " ++ prog ++ " " ++ versionStr
   return $ usageInfo header options
-  
-optVersion :: GSMenuOption a
-optVersion = Option "v" ["version"]
-             (NoArg $ \_ -> do 
-                hPutStrLn stderr ("gsmenu " ++ versionString ++ ".")
-                hPutStrLn stderr "Copyright (C) Troels Henriksen."
-                exitSuccess)
-             "Print version number."
-             
-versionString :: String
-versionString = "1.2-dev"
-             
-optDisplay :: GSMenuOption a
-optDisplay = Option "d" ["display"]
-             (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy" )
-             "Specify the X display to connect to."
-             
-optComplex :: GSMenuOption a
-optComplex = Option "c" ["complex"]
-             (NoArg (\cfg -> return $ cfg { cfg_complex = True }) )
-             "Use complex input format."
 
-optEnumResult :: GSMenuOption a
-optEnumResult = Option "e" ["enumerate"]
-                (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }) )
-                "Print the result as the (zero-indexed) element number."
+versionStr :: String
+versionStr = "1.2-dev"
 
-optCellHeight :: GSMenuOption a
-optCellHeight = Option [] ["cellheight"]
-                (ReqArg (inGPConfig $ \arg gpc ->
-                          gpc { gp_cellheight = readInt arg }) "height")
-                "The height of each element cell"
-
-optCellWidth :: GSMenuOption a
-optCellWidth = Option [] ["cellwidth"]
-                (ReqArg (inGPConfig $ \arg gpc ->
-                          gpc { gp_cellwidth = readInt arg }) "width")
-                "The width of each element cell"
-
-optCellPadding :: GSMenuOption a
-optCellPadding = Option [] ["cellpadding"]
-                 (ReqArg (inGPConfig $ \arg gpc ->
-                           gpc { gp_cellpadding = readInt arg }) "padding")
-                 "The inner padding of each element cell."
-
-optFont :: GSMenuOption a
-optFont = Option [] ["font"]
-          (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_font = arg }) "font")
-          "The font used for printing names of elements."
-
-optSubFont :: GSMenuOption a
-optSubFont = Option [] ["subfont"]
-             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_subfont = arg}) "font")
-             "The font used for printing extra lines in elements."
-
-optInputFont :: GSMenuOption a
-optInputFont = Option [] ["inputfont"]
-               (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_inputfont = arg}) "font")
-               "The font used for the input field."
-
-optOriginX :: GSMenuOption a
-optOriginX = Option "x" []
-             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_originFractX = readFloat arg }) "float")
-             "The horizontal center of the grid, range [0,1]."
-             
-optOriginY :: GSMenuOption a
-optOriginY = Option "y" []
-             (ReqArg (inGPConfig $ \arg gpc -> gpc { gp_originFractY = readFloat arg }) "float")
-             "The vertical center of the grid, range [0,1]"
+options :: [GSMenuOption a]
+options = [ Option "h" (NoArg $ \_ -> do
+                          hPutStrLn stderr =<< usageStr
+                          exitSuccess)
+            "Display this help screen."
+          , Option "v" (NoArg $ \_ -> do 
+                          hPutStrLn stderr ("gsmenu " ++ versionStr ++ ".")
+                          hPutStrLn stderr "Copyright (C) Troels Henriksen."
+                          exitSuccess)
+            "Print version number."
+          , Option "dpy"
+            (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy")
+            "Specify the X display to connect to."
+          , Option "c"
+            (NoArg (\cfg -> return $ cfg { cfg_complex = True }))
+            "Use complex input format."
+          , Option "e"
+            (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }))
+            "Print the result as the (zero-indexed) element number."
+          , Option "cellheight"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_cellheight = readInt arg }) "height")
+            "The height of each element cell"
+          , Option "cellwidth"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_cellwidth = readInt arg }) "width")
+            "The width of each element cell"
+          , Option "cellpadding"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_cellpadding = readInt arg }) "padding")
+            "The inner padding of each element cell."
+          , Option "font"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_font = arg }) "font")
+            "The font used for printing names of elements."
+          , Option "subfont"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_subfont = arg}) "font")
+            "The font used for printing extra lines in elements."
+          , Option "inputfont"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_inputfont = arg}) "font")
+            "The font used for the input field."
+          , Option "x"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_originFractX = readFloat arg }) "float")
+            "The horizontal center of the grid, range [0,1]."
+          , Option "y"
+            (ReqArg (inGPConfig $ \arg gpc ->
+                      gpc { gp_originFractY = readFloat arg }) "float")
+            "The vertical center of the grid, range [0,1]"
+          ]
                
 parseElements :: SourceName -> String -> Either ParseError [Element a]
 parseElements = parse $ many element <* eof
