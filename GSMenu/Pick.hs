@@ -30,6 +30,8 @@ module GSMenu.Pick
     , pop
     ) where
 
+import Codec.Binary.UTF8.String (decodeString)
+
 import Data.Maybe
 import Data.Bits
 import Data.Char
@@ -463,7 +465,7 @@ eventLoop = do
     (ks,s) <- if ev_event_type ev == keyPress
               then lookupString $ asKeyEvent e
               else return (Nothing, "")
-    return (ks,s,ev)
+    return (ks,decodeString s,ev) -- XXX, relies on s being UTF-8 encoded.
   handle (fromMaybe xK_VoidSymbol keysym,string) event
 
 selectAt :: TwoDPosition -> TwoD a (Maybe a)
