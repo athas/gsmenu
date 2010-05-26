@@ -4,7 +4,6 @@ gsmenu \- grid menu
 .SH SYNOPSIS
 .nh
 gsmenu
-[\fB\-d=\fIdisplay\fR]
 [\fB\-c\fR]
 [\fB\-e\fR]
 [\fB\-cellheight \fIheight\fR]
@@ -21,11 +20,9 @@ gsmenu
 .SS Overview
 gsmenu is a generic grid menu for X11, originally a port of the
 GridSelect contrib for XMonad.  It displays elements as a grid of
-rectangular cells.
+rectangular cells.  gsmenu always contacts the display indicated in
+the DISPLAY environment variable.
 .SS Options
-.TP
-.B \-dpy
-specifies the X server to contact.
 .TP
 .B \-c
 makes gsmenu accept complex input format (see below).

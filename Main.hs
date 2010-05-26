@@ -158,9 +158,6 @@ options = [ Option "h" (NoArg $ \_ -> do
                           hPutStrLn stderr "Copyright (C) Troels Henriksen."
                           exitSuccess)
             "Print version number."
-          , Option "dpy"
-            (ReqArg (\arg cfg -> return $ cfg { cfg_display = arg }) "dpy")
-            "Specify the X display to connect to."
           , Option "c"
             (NoArg (\cfg -> return $ cfg { cfg_complex = True }))
             "Use complex input format."
