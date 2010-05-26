@@ -27,7 +27,7 @@ then
 	cd "$dir" &&
 	for file in *
 	do
-	    test -x "$file" && echo "name=\"$file\" $tags"
+	    test -x "$file" && echo "name=\"$(echo $file|sed 's/"/""/g')\" \"$dir\" $tags"
 	done
     done | sort | uniq > "$CACHE".$$ &&
     mv "$CACHE".$$ "$CACHE"
