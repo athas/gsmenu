@@ -146,7 +146,7 @@ usageStr = do
   return $ usageInfo header options
 
 versionStr :: String
-versionStr = "2.0-dev"
+versionStr = "2.0"
 
 options :: [GSMenuOption a]
 options = [ Option "h" (NoArg $ \_ -> do
