@@ -149,16 +149,7 @@ versionStr :: String
 versionStr = "2.1-dev"
 
 options :: [GSMenuOption a]
-options = [ Option "h" (NoArg $ \_ -> do
-                          hPutStrLn stderr =<< usageStr
-                          exitSuccess)
-            "Display this help screen."
-          , Option "v" (NoArg $ \_ -> do 
-                          hPutStrLn stderr ("gsmenu " ++ versionStr ++ ".")
-                          hPutStrLn stderr "Copyright (C) Troels Henriksen."
-                          exitSuccess)
-            "Print version number."
-          , Option "c"
+options = [ Option "c"
             (NoArg (\cfg -> return $ cfg { cfg_complex = True }))
             "Use complex input format."
           , Option "e"
