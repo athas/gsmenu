@@ -63,7 +63,7 @@ main = do
     (_, nonopts, errs) -> do 
               mapM_ (hPutStrLn stderr . ("Junk argument: " ++)) nonopts
               usage <- usageStr
-              hPutStrLn stderr $ concat errs ++ usage
+              hPutStr stderr $ concat errs ++ usage
               exitFailure
 
 runWithCfg :: AppConfig String -> IO ()
