@@ -32,6 +32,8 @@ module GSMenu.Pick
 
 import Codec.Binary.UTF8.String (decodeString)
 
+import Control.Concurrent
+
 import Data.Maybe
 import Data.Bits
 import Data.Char
@@ -602,6 +604,17 @@ freeTextPane dpy TextPane { tp_win      = win
   mapM_ (freeGC dpy) [bggc, fgc]
   sync dpy False
 
+grabInput :: Display -> Window -> IO GrabStatus
+grabInput dpy win = do
+  grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
+  grab (1000 :: Int)
+  where grab 0 = return alreadyGrabbed
+        grab n = do status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
+                    if status /= grabSuccess
+                      then threadDelay 1000 >> grab (n-1)
+                      else return status
+                     
+
 -- | Brings up a 2D grid of elements in the center of the screen, and one can
 -- select an element with cursors keys. The selected element is returned.
 gpick :: Display -> Screen -> Rectangle -> GPConfig a
@@ -613,10 +626,9 @@ gpick dpy screen rect gpconfig ellist = do
   ep@ElemPane { ep_win = win } <-
     mkElemPane dpy screen rect $ gp_bordercolor gpconfig
   tp <- mkTextPane dpy screen rect gpconfig
-  status <- grabKeyboard dpy win True grabModeAsync grabModeAsync currentTime
-  grabButton dpy button1 anyModifier win True buttonReleaseMask grabModeAsync grabModeAsync none none
-  font      <- initXMF dpy (gp_font gpconfig)
-  subfont   <- initXMF dpy (gp_subfont gpconfig)
+  status  <- grabInput dpy win
+  font    <- initXMF dpy (gp_font gpconfig)
+  subfont <- initXMF dpy (gp_subfont gpconfig)
   if status /= grabSuccess then return $ Left "Could not establish keyboard grab"
     else do
       let restriction ss cs = (ss/fi (cs gpconfig)-1)/2 :: Double
