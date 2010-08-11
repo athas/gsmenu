@@ -228,16 +228,11 @@ drawWinBox win (fg,bg) text sub x y cw ch = do
         x' = fi (x+fi cp) :: Position
         y' = y+(fi ch-fi sheight-fi theight) `div` 2 + fi theight :: Position
         ys = scanl1 (+) $ map ((+y') . fi) sheights
-        putline f voff s = do
+        putline f voff s =
           stopText dpy f (cw-fi (2*cp)) s >>=
             printStringXMF dpy win f (ep_textgc ep) fg bg x' voff
     _ <- putline font y' text
     zipWithM_ (putline subfont) ys subs'
-
-drawBoxMask :: Display -> GC -> Pixmap -> Position
-            -> Position -> Dimension -> Dimension -> IO ()
-drawBoxMask dpy gc pm x y w h =
-  fillRectangle dpy pm gc x y w h
 
 getGC :: Drawable -> String -> TwoD a GC
 getGC d fg = do
@@ -278,7 +273,7 @@ redrawAllElements = do
            , ep_maskgc    = maskgc
            , ep_unmaskgc  = unmaskgc } <- asks td_elempane
   io $ fillRectangle dpy pm maskgc 0 0 pw ph
-  let drawbox _ x y w h = io $ drawBoxMask dpy unmaskgc pm x y (w+1) (h+1)
+  let drawbox _ x y w h = io $ fillRectangle dpy pm unmaskgc x y (w+1) (h+1)
   updatingBoxes drawbox els
   io $ xshapeCombineMask dpy win shapeBounding 0 0 pm shapeSet
   redrawElements els
@@ -484,7 +479,7 @@ cleanMask km = complement (numLockMask
 handle :: (KeySym, String) -> Event -> TwoD a (Maybe a)
 handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
     | t == keyPress &&
-      (ks == xK_Escape || (m' == controlMask && (ks == xK_g || ks == xK_c)))
+      (ks == xK_Escape || (m' == controlMask && elem ks [xK_g, xK_c]))
         = return Nothing
     | t == keyPress && ks == xK_Return =
         selectAt =<< gets td_curpos
