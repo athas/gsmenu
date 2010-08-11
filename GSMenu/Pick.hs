@@ -483,7 +483,9 @@ cleanMask km = complement (numLockMask
 
 handle :: (KeySym, String) -> Event -> TwoD a (Maybe a)
 handle (ks,s) (KeyEvent {ev_event_type = t, ev_state = m })
-    | t == keyPress && ks == xK_Escape = return Nothing
+    | t == keyPress &&
+      (ks == xK_Escape || (m' == controlMask && (ks == xK_g || ks == xK_c)))
+        = return Nothing
     | t == keyPress && ks == xK_Return =
         selectAt =<< gets td_curpos
     | t == keyPress = do
