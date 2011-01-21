@@ -496,8 +496,8 @@ handle _ (ButtonEvent { ev_event_type = t, ev_x = x, ev_y = y })
       cw    <- asks (gp_cellwidth . td_gpconfig)
       w     <- asks (ep_width . td_elempane)
       h     <- asks (ep_height . td_elempane)
-      let gridX = fi $ (fi x - (w - cw) `div` 2) `div` cw
-          gridY = fi $ (fi y - (h - ch) `div` 2) `div` ch
+      let gridX = (fi x - (fi w - fi cw) `div` 2) `div` fi cw
+          gridY = (fi y - (fi h - fi ch) `div` 2) `div` fi ch
       selectAt (gridX, gridY)
     | otherwise = eventLoop
 
