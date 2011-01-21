@@ -384,13 +384,12 @@ include = solidify Include
 
 move :: TwoDPosition -> TwoD a ()
 move (dx, dy) = do
-  state <- get
-  elmap <- elementMap
-  let (ox, oy) = td_curpos state
-      newPos   = (ox+dx, oy+dy)
+  (ox, oy) <- gets td_curpos
+  elmap    <- elementMap
+  let newPos   = (ox+dx, oy+dy)
       newSelectedEl = findInElementMap newPos elmap
   when (isJust newSelectedEl) $ do
-    put state { td_curpos =  newPos }
+    modify $ \s -> s { td_curpos =  newPos }
     redrawElements
       (catMaybes [ findInElementMap (ox, oy) elmap
                  , newSelectedEl])
