@@ -1,4 +1,4 @@
-.TH GSMENU 1 gsmenu\-2.1
+.TH GSMENU 1 gsmenu\-2.2
 .SH NAME
 gsmenu \- grid menu
 .SH SYNOPSIS
@@ -107,6 +107,13 @@ names are supported).
 .TP
 .B tags
 A list of tags of the element, used when filtering.
+.TP
+.B value
+Instead of the name, print the value of this key when the element is
+selected.  If a list, a newline is printed after every element but the
+last.  If the
+.B \-e
+option is passed, this key has no effect.
 
 .SS INTERACTION
 When the user moves focus to an element and presses Return, that

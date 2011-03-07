@@ -66,7 +66,7 @@ main = do
               hPutStr stderr $ concat errs ++ usage
               exitFailure
 
-runWithCfg :: AppConfig String -> IO ()
+runWithCfg :: AppConfig [String] -> IO ()
 runWithCfg cfg = do 
   dpy   <- setupDisplay $ cfg_display cfg
   let screen = defaultScreenOfDisplay dpy
@@ -74,15 +74,18 @@ runWithCfg cfg = do
   rect  <- findRectangle dpy (rootWindowOfScreen screen)
   sel   <- gpick dpy screen rect (cfg_gpconfig cfg) elems
   case sel of
-    Left reason     -> err reason >> exitWith (ExitFailure 1)
-    Right Nothing   -> exitWith $ ExitFailure 2
-    Right (Just el) -> putStr el >> exitSuccess
+    Left reason      -> err reason >> exitWith (ExitFailure 1)
+    Right Nothing    -> exitWith $ ExitFailure 2
+    Right (Just els) -> printer els >> exitSuccess
     where reader
            | cfg_complex cfg = readElementsC "stdin"
            | otherwise       = readElements
+          printer (x:xs:rest) = putStrLn x *> printer (xs:rest)
+          printer [x]         = putStr x
+          printer _           = return ()
           valuer
-           | cfg_enumerate cfg = const show
-           | otherwise         = \ s _ -> s
+           | cfg_enumerate cfg = const $ (:[]) . show
+           | otherwise         = \s _ -> [s]
 
 setupDisplay :: String -> IO Display
 setupDisplay dstr =
@@ -99,8 +102,8 @@ findRectangle dpy rootw = do
   fromJust <$> find hasPointer <$> getScreenInfo dpy
 
 readElements :: MonadIO m => Handle 
-             -> (String -> Integer -> a)
-             -> m [Element a]
+             -> (String -> Integer -> [String])
+             -> m [Element [String]]
 readElements h f = do
   str   <- io $ hGetContents h
   return $ zipWith mk (lines str) [0..]
@@ -112,15 +115,18 @@ readElements h f = do
                           
 readElementsC :: MonadIO m => SourceName
               -> Handle
-              -> (String -> Integer -> a)
-              -> m [Element a]
+              -> (String -> Integer -> [String])
+              -> m [Element [String]]
 readElementsC sn h f = do
   str   <- io $ hGetContents h
   case parseElements sn str of
     Left  e   -> error $ show e
     Right els -> return $ zipWith mk els [0..]
-        where mk elm num = elm {
-                el_data = f (fst $ el_disp elm) num }
+        where mk elm num =
+                  elm { el_data = fromMaybe 
+                                  (f (fst $ el_disp elm) num) 
+                                  (el_data elm)
+                      }
 
 type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
 
@@ -146,7 +152,7 @@ usageStr = do
   return $ usageInfo header options
 
 versionStr :: String
-versionStr = "2.1-dev"
+versionStr = "2.2"
 
 options :: [GSMenuOption a]
 options = [ Option "c"
@@ -189,13 +195,13 @@ options = [ Option "c"
             "The vertical center of the grid, range [0,1]"
           ]
                
-parseElements :: SourceName -> String -> Either ParseError [Element a]
+parseElements :: SourceName -> String -> Either ParseError [Element (Maybe [String])]
 parseElements = parse $ many element <* eof
 
-blankElem :: Element a
+blankElem :: Element (Maybe a)
 blankElem = Element {
               el_colors = ("black", "white")
-            , el_data   = error "Element without data."
+            , el_data   = Nothing
             , el_disp   = error "Element without display."
             , el_tags   = []
             }
@@ -212,7 +218,7 @@ tagColors ts =
 twodigitHex :: Word8 -> String
 twodigitHex = printf "%02x"
 
-element :: GenParser Char u (Element a)
+element :: GenParser Char u (Element (Maybe [String]))
 element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
              let (fg, bg) = tagColors $ tags kvs
              foldM procKv blankElem { el_colors = (fg, bg) } kvs
@@ -232,6 +238,8 @@ element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
           procKv _   ("bg", _) = badval "bg"
           procKv elm ("tags",val) =
             return elm { el_tags = el_tags elm ++ filter (/="") val }
+          procKv elm ("value",val) =
+            return elm { el_data = Just val }
           procKv _ (k, _) = nokey k
           badval = parserFail . ("Bad value for field " ++) . quote
           nokey  = parserFail . ("Unknown key " ++) . quote
