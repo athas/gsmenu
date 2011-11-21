@@ -1,81 +1,30 @@
-.TH GSMENU 1 gsmenu\-2.2
+.TH GSMENU 1 gsmenu\-4.0
 .SH NAME
 gsmenu \- grid menu
 .SH SYNOPSIS
 .nh
 gsmenu
-[\fB\-c\fR]
-[\fB\-e\fR]
-[\fB\-cellheight \fIheight\fR]
-[\fB\-cellwidth \fIwidth\fR\fR]
-[\fB\-cellpadding \fIpadding\fR]
-[\fB\-x \fIposition\fR]
-[\fB\-y \fIposition\fR]
-[\fB\-font \fIfont\fR]
-[\fB\-subfont \fIfont\fR]
-[\fB\-inputfont \fIfont\fR]
-[\fB\-h\fR]
-[\fB\-v\fR]
+[Sindre options...]
 .SH DESCRIPTION
 .SS Overview
 gsmenu is a generic grid menu for X11, originally a port of the
-GridSelect contrib for XMonad.  It displays elements as a grid of
-rectangular cells.  gsmenu always contacts the display indicated in
-the DISPLAY environment variable.
+GridSelect contrib for XMonad.  Now it is a program built on
+Sindre. It displays elements as a grid of rectangular cells.  gsmenu
+always uses the display indicated in the DISPLAY environment variable.
 .SS Options
-.TP
-.B \-c
-makes gsmenu accept complex input format (see below).
-.TP
-.B \-e
-print the selected item as an index into the (0-indexed) sequence of
-input elements.
-.TP
-.B \-cellheight
-The height of each cell in pixels.
-.TP
-.B \-cellwidth
-The width of each cell in pixels.
-.TP
-.B \-cellpadding
-The inner text padding of each cell in pixels.
-.TP
-.B \-x
-Set the horizontal position of the center cell as a proportion of the
-screen width.
-.TP
-.B \-y
-As \fB\-x\fR, but sets the vertical position.
-.TP
-.B \-font
-The first line of elements is printed in this font.  Both traditional
-X11-font-strings and XFT-fonts are accepted, the latter when prefixed
-with "xft:" (for example "xft:URW Bookman L-10").
-.TP
-.B \-subfont
-As \-font, but used for secondary lines of elements.
-.TP
-.B \-inputfont
-As \-font, but affects the user input text field.
-.TP
-.B \-h
-prints command option summary to standard output, then exits.
-.TP
-.B \-v
-prints version information to standard output, then exits.
+No options are accepted apart from those provided by
+.IR sindre (1).
 .SH USAGE
 gsmenu reads a list of newline-separated elements from standard input
 and presents them in a grid.  Each element has a foreground and a
 background colour, as well as a name (what will be visible on the
-screen) and a list of tags that can be used for filtering.
+screen) and a list of tags that are used only for filtering.
 .SS INPUT FORMAT
-In the "simple" input format (the default), each line corresponds to
-the name of a single element and each element has an empty set of
-tags.  In the "complex" input format, entries take the form of
-key-value pairs, with the key being a sequence of alphanumerics,
-followed by an equals sign, followed by a value in double quotes
-(double-quotes can be embedded in values by doubling them).  For
-example, an element might be
+The standard Sindre key-value format is used.  Each line takes the
+form of key-value pairs, with the key being a sequence of
+alphanumerics, followed by an equals sign, followed by a value in
+double quotes (double-quotes can be embedded by doubling
+them).  For example, an element might be
 
 .nf
 name="foo" bg="red"
@@ -111,18 +60,13 @@ A list of tags of the element, used when filtering.
 .B value
 Instead of the name, print the value of this key when the element is
 selected.  If a list, a newline is printed after every element but the
-last.  If the
-.B \-e
-option is passed, this key has no effect.
-
+last.
 .SS INTERACTION
 When the user moves focus to an element and presses Return, that
-element is selected and is printed to standard output (or its index,
-if
-.B \-e
-is used) and gsmenu terminates.  Elements can also be selected by
-clicking on them with the mouse.  Additionally, the following keyboard
-commands are recognised:
+element is selected and is printed to standard output and gsmenu
+terminates.  Elements can also be selected by clicking on them with
+the mouse.  Additionally, the following keyboard commands are
+recognised:
 .TP
 .B Any printable character
 Appends the character to the text in the input field.  This works as a filter:
@@ -168,4 +112,6 @@ if there was an internal problem, and
 .B 2
 if the user cancelled.
 .SH SEE ALSO
-.BR dmenu (1)
+.IR sindre (1),
+.IR dmenu (1),
+.IR xmonad (1)

@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Main
@@ -13,250 +16,340 @@
 
 module Main (main) where
 
+import GSMenu.Util
+
+import Sindre.Main hiding (value, string, position)
+import Sindre.Lib
+import Sindre.Parser
+import Sindre.Widgets
+import Sindre.X11
+import Sindre.KeyVal
+
+import Graphics.X11.Xlib hiding (refreshKeyboardMapping, Rectangle, textWidth, allocColor,
+                                 textExtents)
+import qualified Graphics.X11.Xft as Xft
+
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans
+import Control.Monad.Reader
+import Control.Monad.State.Lazy
 
-import Data.Maybe
+import Data.Either
 import Data.List
+import Data.Maybe
 import Data.Word (Word8)
-
-import Graphics.X11.Xlib hiding (refreshKeyboardMapping)
-import Graphics.X11.Xinerama
-
-import System.Console.GetFlag
-import System.Environment
-import System.Exit
-import System.IO
-
-import Text.Parsec hiding ((<|>), many, optional)
-import Text.Parsec.String
+import qualified Data.Map as M
+import qualified Data.Text as T
 
 import Text.Printf
 
-import GSMenu.Config
-import GSMenu.Pick
-import GSMenu.Util
+import System.Environment
 
-data AppConfig a = AppConfig {
-      cfg_complex   :: Bool
-    , cfg_display   :: String
-    , cfg_enumerate :: Bool
-    , cfg_gpconfig  :: GPConfig a
-  }
-
-defaultConfig :: AppConfig a
-defaultConfig = AppConfig {
-                  cfg_complex   = False
-                , cfg_display   = ""
-                , cfg_enumerate = False
-                , cfg_gpconfig  = defaultGPConfig
-                }
-
+-- | The main Sindre entry point.
 main :: IO ()
-main = do
-  opts  <- getOpt RequireOrder options <$> getArgs
-  dstr  <- getEnv "DISPLAY" `catch` const (return "")
-  let cfg = defaultConfig { cfg_display = dstr }
-  case opts of
-    (opts', [], []) -> runWithCfg =<< foldl (>>=) (return cfg) opts'
-    (_, nonopts, errs) -> do 
-              mapM_ (hPutStrLn stderr . ("Junk argument: " ++)) nonopts
-              usage <- usageStr
-              hPutStr stderr $ concat errs ++ usage
-              exitFailure
+main = case parseSindre emptyProgram "builtin" prog of
+  Left e -> error $ show e
+  Right prog' ->
+    sindreMain prog' classMap' objectMap funcMap globMap =<< getArgs
+  where prog = unlines [ "GUI { Vertically { grid=Grid(); input=Input(minwidth=0) } }"
+                       , "BEGIN { focus input; }"
+                       , "<C-g> || <Escape> { exit 2 }"
+                       , "stdin->lines(lines) { grid.insert(lines); }"
+                       , "input.value->changed(from, to) { grid.filter(to) }"
+                       , "<Right> || <C-f> { grid.east() }"
+                       , "<Left> || <C-b> { grid.west() }"
+                       , "<Up> || <C-p> { grid.north() }"
+                       , "<Down> || <C-n> { grid.south() }"
+                       , "<Return> { print grid.selected; exit }"
+                       , "<C-s> { grid.next() }"
+                       , "<C-r> { grid.prev() }" ]
+        classMap' = M.insert "Grid" mkGrid classMap
 
-runWithCfg :: AppConfig [String] -> IO ()
-runWithCfg cfg = do 
-  dpy   <- setupDisplay $ cfg_display cfg
-  let screen = defaultScreenOfDisplay dpy
-  elems <- reader stdin valuer
-  rect  <- findRectangle dpy (rootWindowOfScreen screen)
-  sel   <- gpick dpy screen rect (cfg_gpconfig cfg) elems
-  case sel of
-    Left reason      -> err reason >> exitWith (ExitFailure 1)
-    Right Nothing    -> exitWith $ ExitFailure 2
-    Right (Just els) -> printer els >> exitSuccess
-    where reader
-           | cfg_complex cfg = readElementsC "stdin"
-           | otherwise       = readElements
-          printer (x:xs:rest) = putStrLn x *> printer (xs:rest)
-          printer [x]         = putStr x
-          printer _           = return ()
-          valuer
-           | cfg_enumerate cfg = const $ (:[]) . show
-           | otherwise         = \s _ -> [s]
+data Element = Element { elementName     :: T.Text
+                       , elementSubnames :: [T.Text]
+                       , elementTags     :: [T.Text]
+                       , elementFg       :: Xft.Color
+                       , elementBg       :: Xft.Color
+                       , elementValue    :: T.Text }
 
-setupDisplay :: String -> IO Display
-setupDisplay dstr =
-  openDisplay dstr `Prelude.catch` \_ ->
-    error $ "Cannot open display \"" ++ dstr ++ "\"."
+match :: T.Text -> Element -> Bool
+match f e = (T.toCaseFold f `T.isInfixOf`) `any`
+            map T.toCaseFold (elementName e : elementSubnames e ++ elementTags e)
 
-findRectangle :: Display -> Window -> IO Rectangle
-findRectangle dpy rootw = do
-  (_, _, _, x, y, _, _, _) <- queryPointer dpy rootw
-  let hasPointer rect = fi x >= rect_x rect &&
-                        fi (rect_width rect) + rect_x rect > fi x &&
-                        fi y >= rect_y rect &&
-                        fi (rect_height rect) + rect_y rect > fi y
-  fromJust <$> find hasPointer <$> getScreenInfo dpy
+type TwoDPos = (Integer, Integer)
+type TwoDElement = (TwoDPos, Element)
 
-readElements :: MonadIO m => Handle 
-             -> (String -> Integer -> [String])
-             -> m [Element [String]]
-readElements h f = do
-  str   <- io $ hGetContents h
-  return $ zipWith mk (lines str) [0..]
-      where mk line num = Element
-                          { el_colors = ("black", "white")
-                          , el_data   = f line num
-                          , el_disp   = (line, [])
-                          , el_tags   = [] }
-                          
-readElementsC :: MonadIO m => SourceName
-              -> Handle
-              -> (String -> Integer -> [String])
-              -> m [Element [String]]
-readElementsC sn h f = do
-  str   <- io $ hGetContents h
-  case parseElements sn str of
-    Left  e   -> error $ show e
-    Right els -> return $ zipWith mk els [0..]
-        where mk elm num =
-                  elm { el_data = fromMaybe 
-                                  (f (fst $ el_disp elm) num) 
-                                  (el_data elm)
-                      }
+diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
+diamondLayer 0 = [(0,0)]
+diamondLayer n = concat [ zip [0..]      [n,n-1..1]
+                        , zip [n,n-1..1] [0,-1..]
+                        , zip [0,-1..]   [-n..(-1)]
+                        , zip [-n..(-1)] [0,1..] ]
 
-type GSMenuOption a = OptDescr (AppConfig a -> IO (AppConfig a))
+diamond :: (Enum a, Num a) => [(a, a)]
+diamond = concatMap diamondLayer [0..]
 
-inGPConfig :: (String -> GPConfig a -> GPConfig a)
-            -> String -> AppConfig a -> IO (AppConfig a)
-inGPConfig f arg cfg = return $ cfg { cfg_gpconfig = f arg (cfg_gpconfig cfg) }
+diamondRestrict :: Integer -> Integer -> Integer -> Integer -> [TwoDPos]
+diamondRestrict x y originX originY =
+  filter (\(x',y') -> abs x' <= x && abs y' <= y) .
+  map (\(x', y') -> (x' + originX, y' + originY)) .
+  take 1000 $ diamond
 
-tryRead :: Read a => (String -> String) -> String -> a
-tryRead ef s = case reads s of
-                [(x, "")] -> x
-                _         -> error $ ef s
+data ElementGrid =
+  ElementGrid { position :: TwoDPos
+              , elements :: M.Map TwoDPos Element }
 
-readInt :: (Integral a, Read a) => String -> a
-readInt = tryRead $ (++ " is not an integer.") . quote
+emptyGrid :: ElementGrid
+emptyGrid = ElementGrid (0,0) M.empty
 
-readFloat :: (Fractional a, Read a) => String -> a
-readFloat = tryRead $ (++ " is not a decimal fraction.") . quote
+gridMove :: (TwoDPos -> TwoDPos) -> ElementGrid -> Maybe ElementGrid
+gridMove f grid = const (grid { position = pos' })
+                  <$> M.lookup pos' (elements grid)
+  where pos' = f $ position grid
 
-usageStr :: IO String
-usageStr = do
-  prog <- getProgName
-  let header = "Help for " ++ prog ++ " " ++ versionStr
-  return $ usageInfo header options
+south :: ElementGrid -> Maybe ElementGrid
+south = gridMove $ \(x,y) -> (x,y+1)
+east :: ElementGrid -> Maybe ElementGrid
+east = gridMove $ \(x,y) -> (x+1,y)
+north :: ElementGrid -> Maybe ElementGrid
+north = gridMove $ \(x,y) -> (x,y-1)
+west :: ElementGrid -> Maybe ElementGrid
+west = gridMove $ \(x,y) -> (x-1,y)
 
-versionStr :: String
-versionStr = "2.2"
+gridToList :: ElementGrid -> [TwoDElement]
+gridToList = M.toList . elements
 
-options :: [GSMenuOption a]
-options = [ Option "c"
-            (NoArg (\cfg -> return $ cfg { cfg_complex = True }))
-            "Use complex input format."
-          , Option "e"
-            (NoArg (\cfg -> return $ cfg { cfg_enumerate = True }))
-            "Print the result as the (zero-indexed) element number."
-          , Option "cellheight"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_cellheight = readInt arg }) "height")
-            "The height of each element cell"
-          , Option "cellwidth"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_cellwidth = readInt arg }) "width")
-            "The width of each element cell"
-          , Option "cellpadding"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_cellpadding = readInt arg }) "padding")
-            "The inner padding of each element cell."
-          , Option "font"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_font = arg }) "font")
-            "The font used for printing names of elements."
-          , Option "subfont"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_subfont = arg}) "font")
-            "The font used for printing extra lines in elements."
-          , Option "inputfont"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_inputfont = arg}) "font")
-            "The font used for the input field."
-          , Option "x"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_originFractX = readFloat arg }) "float")
-            "The horizontal center of the grid, range [0,1]."
-          , Option "y"
-            (ReqArg (inGPConfig $ \arg gpc ->
-                      gpc { gp_originFractY = readFloat arg }) "float")
-            "The vertical center of the grid, range [0,1]"
-          ]
-               
-parseElements :: SourceName -> String -> Either ParseError [Element (Maybe [String])]
-parseElements = parse $ many element <* eof
+gridFromMap :: M.Map TwoDPos Element -> TwoDPos -> ElementGrid
+gridFromMap = flip ElementGrid
 
-blankElem :: Element (Maybe a)
-blankElem = Element {
-              el_colors = ("black", "white")
-            , el_data   = Nothing
-            , el_disp   = error "Element without display."
-            , el_tags   = []
-            }
+cellWidth :: Num a => a
+cellWidth = 130
+cellHeight :: Num a => a
+cellHeight = 50
+cellPadding :: Num a => a
+cellPadding = 10
+
+data Grid = Grid { gridElems :: [Element]
+                 , gridSelElems :: [Element]
+                 , gridFilter :: T.Text
+                 , gridElementMap :: ElementGrid
+                 , gridVisual :: VisualOpts
+                 , gridRect :: Rectangle
+                 }
+
+selection :: Grid -> Value
+selection g = maybe falsity (unmold . elementValue)
+              $ M.lookup (position grid) $ elements grid
+  where grid = gridElementMap g
+
+recomputeMap :: ObjectM Grid SindreX11M ()
+recomputeMap = do
+  Rectangle x y rwidth rheight <- gets gridRect
+  let restriction ss cs = (ss/cs-1)/2 :: Double
+      restrictX = floor $ restriction (fi rwidth) cellWidth
+      restrictY = floor $ restriction (fi rheight) cellHeight
+      coords = diamondRestrict restrictX restrictY x y
+  elmap <- liftM (M.fromList . zip coords) $ gets gridSelElems
+  modify $ \s -> s { gridElementMap = gridFromMap elmap (0,0) }
+
+updateRect :: Rectangle -> ObjectM Grid SindreX11M ()
+updateRect r1 = do r2 <- gets gridRect
+                   unless (r1 == r2) $ do
+                     modify $ \s -> s { gridRect = r1 }
+                     recomputeMap
+
+methInsert :: T.Text -> ObjectM Grid SindreX11M ()
+methInsert vs = case partitionEithers $ parser vs of
+                  (e:_,_) -> fail e
+                  ([],els) -> do
+                    els' <- back $ sequence els
+                    modify $ \s ->
+                      s { gridElems = gridElems s ++ els'
+                        , gridSelElems = gridSelElems s ++
+                          filter (match $ gridFilter s) els' }
+                    recomputeMap
+                    fullRedraw
+  where parser = map parseElement . T.lines
+
+methClear :: ObjectM Grid SindreX11M ()
+methClear = modify $ \s -> s { gridElementMap = emptyGrid
+                             , gridElems      = []
+                             , gridSelElems   = [] }
+
+methFilter :: T.Text -> ObjectM Grid SindreX11M ()
+methFilter f = do changeFields [("selected", unmold . selection)] $ \s ->
+                      return s { gridSelElems = filter (match f) $ gridElems s }
+                  recomputeMap
+                  fullRedraw
+
+methNext :: ObjectM Grid SindreX11M ()
+methPrev :: ObjectM Grid SindreX11M ()
+(methNext, methPrev) = (circle next, circle prev)
+    where circle f = do changeFields [("selected", unmold . selection)] $ \s ->
+                            case gridElementMap s of
+                              elems@ElementGrid{position=(x,y)} ->
+                                return s { gridElementMap =
+                                             fromMaybe elems $ f x y elems
+                                         }
+                        redraw
+          next (-1) y | y >= 0 = south <=< south <=< east
+          next x y = case (compare x 0, compare y 0) of
+                       (EQ, EQ) -> south
+                       (EQ, GT) -> east <=< north
+                       (EQ, LT) -> west <=< south
+                       (LT, GT) -> south <=< east
+                       (LT, EQ) -> south <=< east
+                       (LT, LT) -> west <=< south
+                       (GT, GT) -> east <=< north
+                       (GT, _) -> north <=< west
+          prev 0 1 = north
+          prev x y = case (compare x 0, compare y 0) of
+                       (EQ, EQ) -> const Nothing
+                       (EQ, GT) -> west <=< north <=< north
+                       (EQ, LT) -> east <=< south
+                       (LT, GT) -> west <=< north
+                       (LT, EQ) -> north <=< east
+                       (LT, LT) -> north <=< east
+                       (GT, LT) -> east <=< south
+                       (GT, _) -> south <=< west
+
+move :: (ElementGrid -> Maybe ElementGrid) -> ObjectM Grid SindreX11M ()
+move d = do changeFields [("selected", unmold . selection)] $ \s ->
+              return s { gridElementMap = fromMaybe (gridElementMap s)
+                                          $ d $ gridElementMap s
+                       }
+            redraw
+
+instance Object SindreX11M Grid where
+    fieldSetI _ _ = return $ Number 0
+    fieldGetI "selected" = selection <$> get
+    fieldGetI "elements" = Dict <$> M.fromList <$>
+                           zip (map Number [1..]) <$>
+                           map (unmold . elementValue) <$> gridSelElems <$> get
+    fieldGetI _ = return $ Number 0
+    callMethodI "insert" = function methInsert
+    callMethodI "clear"  = function methClear
+    callMethodI "filter" = function methFilter
+    callMethodI "next" = function methNext
+    callMethodI "prev" = function methPrev
+    callMethodI "north" = function $ move north
+    callMethodI "south" = function $ move south
+    callMethodI "west" = function $ move west
+    callMethodI "east" = function $ move east
+    callMethodI m = fail $ "Unknown method '" ++ m ++ "'"
+
+instance Widget SindreX11M Grid where
+    composeI = return (Unlimited, Unlimited)
+    drawI = drawing gridVisual $ \r d fd -> do
+      updateRect r
+      elems <- gets gridElementMap
+      let update (p,e) x y cw ch = do
+            d' <- io $ (`setBgColor` elementBg e) <=<
+                       (`setFgColor` elementFg e) $ d
+            let drawbox | p == position elems = drawWinBox fd
+                        | otherwise = drawWinBox d'
+            drawbox (T.unpack $ elementName e)
+                    (map T.unpack $ elementSubnames e)
+                    x y cw ch
+      back $ updatingBoxes update r elems
+
+updatingBoxes :: (TwoDElement
+                  -> Position -> Position
+                  -> Dimension -> Dimension
+                  -> SindreX11M ())
+              -> Rectangle -> ElementGrid -> SindreX11M [Rectangle]
+updatingBoxes f (Rectangle _ _ w h) egrid = do
+  let w'  = div (w-cellWidth) 2
+      h'  = div (h-cellHeight) 2
+      proc ((x,y), t) = do
+        f ((x,y), t)
+          (fi $ w'+x*cellWidth) (fi $ h'+y*cellHeight)
+          cellWidth cellHeight
+        return $ Rectangle (fi w'+x*cellWidth) (h'+y*cellHeight)
+                           (cellWidth+1) (cellHeight+1)
+  mapM proc $ gridToList egrid
+
+drawWinBox :: Drawer
+           -> String -> [String]
+           -> Position -> Position -> Dimension -> Dimension
+           -> SindreX11M ()
+drawWinBox d text subs x y cw ch = do
+  io $ bg d fillRectangle x y cw ch
+  io $ fg d drawRectangle x y cw ch
+  let theight  = Xft.height $ drawerFont d
+      sheights = map (const $ Xft.height $ drawerFont d) subs
+      room     = ch-2*cellPadding-fi theight
+      (sheight, subs') =
+        fromMaybe (0, []) $
+        find ((<=room) . fst) $
+        reverse $ zip (map sum $ inits sheights) (inits subs)
+      x' = x+cellPadding
+      y' = y+(fi ch-fi sheight-fi theight) `div` 2
+      ys = map (+(y'+theight)) $ scanl (+) 0 $ map fi sheights
+      putline voff s =
+        stopText (drawerFont d) (cw-(2*cellPadding)) s >>=
+          drawText (drawerFgColor d) (drawerFont d) x' voff theight
+  _ <- putline y' text
+  zipWithM_ putline ys subs'
+
+stopText :: Xft.Font -> Dimension -> String -> SindreX11M String
+stopText f mw =
+  shrinkWhile (reverse . inits)
+  (\n -> (> fi mw) <$> fst <$> textExtents f n)
+
+shrinkWhile :: Monad m => ([a] -> [[a]])
+            -> ([a] -> m Bool)
+            -> [a] -> m [a]
+shrinkWhile sh p x = sw $ sh x
+    where sw [n] = return n
+          sw [] = return []
+          sw (n:ns) = do cond <- p n
+                         if cond
+                            then sw ns
+                            else return n
+
+mkGrid :: Constructor SindreX11M
+mkGrid r [] = do
+  visual <- visualOpts r
+  return $ NewWidget
+    Grid { gridElems      = []
+         , gridSelElems   = []
+         , gridFilter     = T.empty
+         , gridElementMap = emptyGrid
+         , gridVisual     = visual
+         , gridRect       = Rectangle 0 0 0 0
+         }
+mkGrid  _ _ = error "Grids do not have children"
+
+parseElement :: T.Text -> Either String (SindreX11M Element)
+parseElement = parseKV textelement
+  where textelement = el
+                      <$?> ([], values $ T.pack "tags")
+                      <||> values (T.pack "name")
+                      <|?> (Nothing, Just <$> value (T.pack "fg"))
+                      <|?> (Nothing, Just <$> value (T.pack "bg"))
+                      <|?> (Nothing, Just <$> value (T.pack "value"))
+        el tags (name:names) fgc bgc val =
+          let (tfg, tbg) = tagColors $ map T.unpack tags
+          in do mgr <- asks sindreXftMgr
+                fgpix <- allocColor mgr $ maybe tfg T.unpack fgc
+                bgpix <- allocColor mgr $ maybe tbg T.unpack bgc
+                return Element { elementName = name
+                               , elementSubnames = names
+                               , elementTags = tags
+                               , elementFg = fgpix
+                               , elementBg = bgpix
+                               , elementValue = fromMaybe name val }
+        el _ _ _ _ _ = error "No name"
 
 tagColors :: [String] -> (String, String)
 tagColors ts =
   let seed x = toInteger (sum $ map ((*x).fromEnum) s) :: Integer
       (r,g,b) = hsv2rgb (seed 83 `mod` 360,
                          fi (seed 191 `mod` 1000)/2500+0.4,
-                         fi  (seed 121 `mod` 1000)/2500+0.4)
+                         fi (seed 121 `mod` 1000)/2500+0.4)
   in ("white", '#' : concatMap (twodigitHex.(round :: Double -> Word8).(*256)) [r, g, b] )
     where s = show ts
 
 twodigitHex :: Word8 -> String
 twodigitHex = printf "%02x"
-
-element :: GenParser Char u (Element (Maybe [String]))
-element = do kvs <- kvPair `sepBy1` realSpaces <* spaces
-             let (fg, bg) = tagColors $ tags kvs
-             foldM procKv blankElem { el_colors = (fg, bg) } kvs
-    where tags (("tags",ts):ls) = ts ++ tags ls
-          tags ((_,_):ls)       = tags ls
-          tags []               = []
-          procKv elm ("name", val : more) =
-            return elm { el_disp = (val, more) }
-          procKv _   ("name", _) = badval "name"
-          procKv elm ("fg", [val]) =
-            return elm {
-              el_colors = (val, snd $ el_colors elm) }
-          procKv _   ("fg", _) = badval "fg"
-          procKv elm ("bg", [val]) =
-            return elm {
-              el_colors = (fst $ el_colors elm, val) }
-          procKv _   ("bg", _) = badval "bg"
-          procKv elm ("tags",val) =
-            return elm { el_tags = el_tags elm ++ filter (/="") val }
-          procKv elm ("value",val) =
-            return elm { el_data = Just val }
-          procKv _ (k, _) = nokey k
-          badval = parserFail . ("Bad value for field " ++) . quote
-          nokey  = parserFail . ("Unknown key " ++) . quote
-
-kvPair :: GenParser Char u (String, [String])
-kvPair =
-  pure (,) <*> (many1 alphaNum <* realSpaces <* char '=' <* realSpaces)
-           <*> many1 (value <* realSpaces)
-
-value :: GenParser Char u String
-value = char '"' *> escapedStr
-
-escapedStr :: GenParser Char u String
-escapedStr = do
-  s <- many $ noneOf "\"\n"
-  (    try (string "\"\"" *> pure ((s++"\"")++) <*> escapedStr)
-   <|> try (string "\"" *> return s))
-
-realSpaces :: GenParser Char u String
-realSpaces = many $ char ' '
