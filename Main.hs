@@ -164,7 +164,7 @@ recomputeMap = do
   elmap <- liftM (M.fromList . zip coords) $ gets gridSelElems
   modify $ \s -> s { gridElementMap = gridFromMap elmap (0,0) }
   newsel <- gets selection
-  when (oldsel /= newsel) $g
+  when (oldsel /= newsel) $
     changed "selected" oldsel newsel
 
 updateRect :: Rectangle -> ObjectM Grid SindreX11M ()
