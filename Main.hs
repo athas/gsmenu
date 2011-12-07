@@ -16,14 +16,13 @@
 
 module Main (main) where
 
-import GSMenu.Util
-
 import Sindre.Main hiding (value, string, position)
 import Sindre.Lib
 import Sindre.Parser
 import Sindre.Widgets
 import Sindre.X11
 import Sindre.KeyVal
+import Sindre.Util
 
 import Graphics.X11.Xlib hiding (refreshKeyboardMapping, Rectangle, textWidth, allocColor,
                                  textExtents)
@@ -51,7 +50,7 @@ main = case parseSindre emptyProgram "builtin" prog of
   Left e -> error $ show e
   Right prog' ->
     sindreMain prog' classMap' objectMap funcMap globMap =<< getArgs
-  where prog = unlines [ "GUI { Vertically { grid=Grid(); input=Input(minwidth=0) } }"
+  where prog = unlines [ "GUI { Vertically { Horizontally { Blank; label=Label(); Blank }; grid=Grid(); input=Input(minwidth=0) } }"
                        , "BEGIN { focus input; }"
                        , "<C-g> || <Escape> { exit 2 }"
                        , "stdin->lines(lines) { grid.insert(lines); }"
@@ -60,9 +59,11 @@ main = case parseSindre emptyProgram "builtin" prog of
                        , "<Left> || <C-b> { grid.west() }"
                        , "<Up> || <C-p> { grid.north() }"
                        , "<Down> || <C-n> { grid.south() }"
-                       , "<Return> { print grid.selected; exit }"
+                       , "<Return> { foo = grid.selected; print foo[\"value\"]; exit }"
                        , "<C-s> { grid.next() }"
-                       , "<C-r> { grid.prev() }" ]
+                       , "<C-r> { grid.prev() }"
+                       , "BEGIN { foo = grid.selected; if (foo) { label.label = foo[\"name\"] } }"
+                       , "grid.selected->changed(from, to) { if (to) { label.label = to[\"name\"] } }" ]
         classMap' = M.insert "Grid" mkGrid classMap
 
 data Element = Element { elementName     :: T.Text
@@ -71,6 +72,9 @@ data Element = Element { elementName     :: T.Text
                        , elementFg       :: Xft.Color
                        , elementBg       :: Xft.Color
                        , elementValue    :: T.Text }
+
+instance Show Element where
+  show = show . elementName
 
 match :: T.Text -> Element -> Bool
 match f e = (T.toCaseFold f `T.isInfixOf`) `any`
@@ -89,15 +93,16 @@ diamondLayer n = concat [ zip [0..]      [n,n-1..1]
 diamond :: (Enum a, Num a) => [(a, a)]
 diamond = concatMap diamondLayer [0..]
 
-diamondRestrict :: Integer -> Integer -> Integer -> Integer -> [TwoDPos]
-diamondRestrict x y originX originY =
+diamondRestrict :: Integer -> Integer -> [TwoDPos]
+diamondRestrict x y =
   filter (\(x',y') -> abs x' <= x && abs y' <= y) .
-  map (\(x', y') -> (x' + originX, y' + originY)) .
+  map (\(x', y') -> (x', y')) .
   take 1000 $ diamond
 
 data ElementGrid =
   ElementGrid { position :: TwoDPos
               , elements :: M.Map TwoDPos Element }
+  deriving (Show)
 
 emptyGrid :: ElementGrid
 emptyGrid = ElementGrid (0,0) M.empty
@@ -129,28 +134,38 @@ cellHeight = 50
 cellPadding :: Num a => a
 cellPadding = 10
 
-data Grid = Grid { gridElems :: [Element]
-                 , gridSelElems :: [Element]
-                 , gridFilter :: T.Text
+data Grid = Grid { gridElems      :: [Element]
+                 , gridSelElems   :: [Element]
+                 , gridFilter     :: T.Text
                  , gridElementMap :: ElementGrid
-                 , gridVisual :: VisualOpts
-                 , gridRect :: Rectangle
+                 , gridVisual     :: VisualOpts
+                 , gridRect       :: Rectangle
                  }
 
 selection :: Grid -> Value
-selection g = maybe falsity (unmold . elementValue)
+selection g = maybe falsity asDict
               $ M.lookup (position grid) $ elements grid
   where grid = gridElementMap g
+        asDict e = Dict $ M.fromList
+                   [ (unmold "name", unmold $ elementName e)
+                   , (unmold "subnames", dict $ elementSubnames e)
+                   , (unmold "tags", dict $ elementTags e)
+                   , (unmold "value", unmold $ elementValue e)]
+        dict = Dict . M.fromList . zip (map Number [0..]) . map unmold
 
 recomputeMap :: ObjectM Grid SindreX11M ()
 recomputeMap = do
-  Rectangle x y rwidth rheight <- gets gridRect
+  Rectangle _ _ rwidth rheight <- gets gridRect
   let restriction ss cs = (ss/cs-1)/2 :: Double
       restrictX = floor $ restriction (fi rwidth) cellWidth
       restrictY = floor $ restriction (fi rheight) cellHeight
-      coords = diamondRestrict restrictX restrictY x y
+      coords = diamondRestrict restrictX restrictY
+  oldsel <- gets selection
   elmap <- liftM (M.fromList . zip coords) $ gets gridSelElems
   modify $ \s -> s { gridElementMap = gridFromMap elmap (0,0) }
+  newsel <- gets selection
+  when (oldsel /= newsel) $g
+    changed "selected" oldsel newsel
 
 updateRect :: Rectangle -> ObjectM Grid SindreX11M ()
 updateRect r1 = do r2 <- gets gridRect
@@ -160,7 +175,7 @@ updateRect r1 = do r2 <- gets gridRect
 
 methInsert :: T.Text -> ObjectM Grid SindreX11M ()
 methInsert vs = case partitionEithers $ parser vs of
-                  (e:_,_) -> fail e
+                  (e:_,_) -> fail $ "Parse error on Grid element: " ++ e
                   ([],els) -> do
                     els' <- back $ sequence els
                     modify $ \s ->
@@ -170,6 +185,19 @@ methInsert vs = case partitionEithers $ parser vs of
                     recomputeMap
                     fullRedraw
   where parser = map parseElement . T.lines
+
+methRemove :: (Element -> Bool) -> ObjectM Grid SindreX11M ()
+methRemove f = do modify $ \s ->
+                    s { gridElems = filter f $ gridElems s
+                      , gridSelElems = filter f $ gridSelElems s }
+                  recomputeMap
+                  fullRedraw
+
+methRemoveByValue :: T.Text -> ObjectM Grid SindreX11M ()
+methRemoveByValue k = methRemove $ (/=k) . elementValue
+
+methRemoveByName :: T.Text -> ObjectM Grid SindreX11M ()
+methRemoveByName k = methRemove $ (/=k) . elementName
 
 methClear :: ObjectM Grid SindreX11M ()
 methClear = modify $ \s -> s { gridElementMap = emptyGrid
@@ -228,6 +256,8 @@ instance Object SindreX11M Grid where
                            map (unmold . elementValue) <$> gridSelElems <$> get
     fieldGetI _ = return $ Number 0
     callMethodI "insert" = function methInsert
+    callMethodI "removeValue" = function methRemoveByValue
+    callMethodI "removeName" = function methRemoveByName
     callMethodI "clear"  = function methClear
     callMethodI "filter" = function methFilter
     callMethodI "next" = function methNext
@@ -258,9 +288,9 @@ updatingBoxes :: (TwoDElement
                   -> Dimension -> Dimension
                   -> SindreX11M ())
               -> Rectangle -> ElementGrid -> SindreX11M [Rectangle]
-updatingBoxes f (Rectangle _ _ w h) egrid = do
-  let w'  = div (w-cellWidth) 2
-      h'  = div (h-cellHeight) 2
+updatingBoxes f (Rectangle origx origy w h) egrid = do
+  let w'  = origx + div (w-cellWidth) 2
+      h'  = origy + div (h-cellHeight) 2
       proc ((x,y), t) = do
         f ((x,y), t)
           (fi $ w'+x*cellWidth) (fi $ h'+y*cellHeight)
