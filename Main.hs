@@ -36,6 +36,7 @@ import Control.Monad.State.Lazy
 import Data.Either
 import Data.List
 import Data.Maybe
+import Data.Traversable (traverse)
 import Data.Word (Word8)
 import qualified Data.Map as M
 import qualified Data.Text as T
@@ -76,12 +77,17 @@ data Element = Element { elementName     :: T.Text
 instance Show Element where
   show = show . elementName
 
+data DisplayedElement = DisplayedElement { displayedName :: String
+                                         , displayedSubnames :: [String]
+                                         , displayedElement :: Element
+                                         } deriving (Show)
+
 match :: T.Text -> Element -> Bool
 match f e = (T.toCaseFold f `T.isInfixOf`) `any`
             map T.toCaseFold (elementName e : elementSubnames e ++ elementTags e)
 
 type TwoDPos = (Integer, Integer)
-type TwoDElement = (TwoDPos, Element)
+type TwoDElement = (TwoDPos, DisplayedElement)
 
 diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
 diamondLayer 0 = [(0,0)]
@@ -101,7 +107,7 @@ diamondRestrict x y =
 
 data ElementGrid =
   ElementGrid { position :: TwoDPos
-              , elements :: M.Map TwoDPos Element }
+              , elements :: M.Map TwoDPos DisplayedElement }
   deriving (Show)
 
 emptyGrid :: ElementGrid
@@ -124,7 +130,7 @@ west = gridMove $ \(x,y) -> (x-1,y)
 gridToList :: ElementGrid -> [TwoDElement]
 gridToList = M.toList . elements
 
-gridFromMap :: M.Map TwoDPos Element -> TwoDPos -> ElementGrid
+gridFromMap :: M.Map TwoDPos DisplayedElement -> TwoDPos -> ElementGrid
 gridFromMap = flip ElementGrid
 
 cellWidth :: Num a => a
@@ -143,7 +149,7 @@ data Grid = Grid { gridElems      :: [Element]
                  }
 
 selection :: Grid -> Value
-selection g = maybe falsity asDict
+selection g = maybe falsity (asDict . displayedElement)
               $ M.lookup (position grid) $ elements grid
   where grid = gridElementMap g
         asDict e = Dict $ M.fromList
@@ -153,25 +159,64 @@ selection g = maybe falsity asDict
                    , (unmold "value", unmold $ elementValue e)]
         dict = Dict . M.fromList . zip (map Number [0..]) . map unmold
 
-recomputeMap :: ObjectM Grid SindreX11M ()
-recomputeMap = do
+gridBox :: Drawer -> Element -> SindreX11M DisplayedElement
+gridBox d e@Element { elementName = text, elementSubnames = subs } = do
+  d' <- io $ (`setBgColor` elementBg e) <=<
+             (`setFgColor` elementFg e) $ d
+  let theight  = Xft.height $ drawerFont d'
+      sheights = map (const theight) subs
+      room     = cellHeight-2*cellPadding-theight
+      (_, subs') =
+        fromMaybe (0::Int, []) $
+        find ((<=room) . fst) $
+        reverse $ zip (map sum $ inits sheights) (inits $ map T.unpack subs)
+      line = stopText (drawerFont d') (cellWidth-(2*cellPadding))
+  liftM3 DisplayedElement
+           (line $ T.unpack text)
+           (mapM line subs')
+           (return e)
+
+stopText :: Xft.Font -> Dimension -> String -> SindreX11M String
+stopText f mw =
+  shrinkWhile (reverse . inits)
+  (\n -> (> fi mw) <$> fst <$> textExtents f n)
+
+shrinkWhile :: Monad m => ([a] -> [[a]])
+            -> ([a] -> m Bool)
+            -> [a] -> m [a]
+shrinkWhile sh p x = sw $ sh x
+    where sw [n] = return n
+          sw [] = return []
+          sw (n:ns) = do cond <- p n
+                         if cond
+                            then sw ns
+                            else return n
+
+recomputeMap :: Drawer -> ObjectM Grid SindreX11M ()
+recomputeMap d = do
   Rectangle _ _ rwidth rheight <- gets gridRect
   let restriction ss cs = (ss/cs-1)/2 :: Double
       restrictX = floor $ restriction (fi rwidth) cellWidth
       restrictY = floor $ restriction (fi rheight) cellHeight
       coords = diamondRestrict restrictX restrictY
+      buildGrid = traverse (back . gridBox d) . M.fromList . zip coords
   oldsel <- gets selection
-  elmap <- liftM (M.fromList . zip coords) $ gets gridSelElems
+  elmap <- buildGrid =<< gets gridSelElems
   modify $ \s -> s { gridElementMap = gridFromMap elmap (0,0) }
   newsel <- gets selection
   when (oldsel /= newsel) $
     changed "selected" oldsel newsel
 
-updateRect :: Rectangle -> ObjectM Grid SindreX11M ()
-updateRect r1 = do r2 <- gets gridRect
-                   unless (r1 == r2) $ do
-                     modify $ \s -> s { gridRect = r1 }
-                     recomputeMap
+needRecompute :: ObjectM Grid SindreX11M ()
+needRecompute = do modify $ \s -> s { gridElementMap = emptyGrid
+                                    , gridRect = Rectangle 0 0 0 0 }
+                   fullRedraw
+
+updateRect :: Rectangle -> Drawer -> ObjectM Grid SindreX11M ()
+updateRect r1 d = do r2 <- gets gridRect
+                     unless (r1 == r2) $ do
+                       modify $ \s -> s { gridRect = r1 }
+                       recomputeMap d
 
 methInsert :: T.Text -> ObjectM Grid SindreX11M ()
 methInsert vs = case partitionEithers $ parser vs of
@@ -182,16 +227,14 @@ methInsert vs = case partitionEithers $ parser vs of
                       s { gridElems = gridElems s ++ els'
                         , gridSelElems = gridSelElems s ++
                           filter (match $ gridFilter s) els' }
-                    recomputeMap
-                    fullRedraw
+                    needRecompute
   where parser = map parseElement . T.lines
 
 methRemove :: (Element -> Bool) -> ObjectM Grid SindreX11M ()
 methRemove f = do modify $ \s ->
                     s { gridElems = filter f $ gridElems s
                       , gridSelElems = filter f $ gridSelElems s }
-                  recomputeMap
-                  fullRedraw
+                  needRecompute
 
 methRemoveByValue :: T.Text -> ObjectM Grid SindreX11M ()
 methRemoveByValue k = methRemove $ (/=k) . elementValue
@@ -207,8 +250,7 @@ methClear = modify $ \s -> s { gridElementMap = emptyGrid
 methFilter :: T.Text -> ObjectM Grid SindreX11M ()
 methFilter f = do changeFields [("selected", unmold . selection)] $ \s ->
                       return s { gridSelElems = filter (match f) $ gridElems s }
-                  recomputeMap
-                  fullRedraw
+                  needRecompute
 
 methNext :: ObjectM Grid SindreX11M ()
 methPrev :: ObjectM Grid SindreX11M ()
@@ -271,16 +313,14 @@ instance Object SindreX11M Grid where
 instance Widget SindreX11M Grid where
     composeI = return (Unlimited, Unlimited)
     drawI = drawing gridVisual $ \r d fd -> do
-      updateRect r
+      updateRect r d
       elems <- gets gridElementMap
       let update (p,e) x y cw ch = do
-            d' <- io $ (`setBgColor` elementBg e) <=<
-                       (`setFgColor` elementFg e) $ d
+            d' <- io $ (`setBgColor` elementBg (displayedElement e)) <=<
+                       (`setFgColor` elementFg (displayedElement e)) $ d
             let drawbox | p == position elems = drawWinBox fd
                         | otherwise = drawWinBox d'
-            drawbox (T.unpack $ elementName e)
-                    (map T.unpack $ elementSubnames e)
-                    x y cw ch
+            drawbox e x y cw ch
       back $ updatingBoxes update r elems
 
 updatingBoxes :: (TwoDElement
@@ -300,43 +340,23 @@ updatingBoxes f (Rectangle origx origy w h) egrid = do
   mapM proc $ gridToList egrid
 
 drawWinBox :: Drawer
-           -> String -> [String]
+           -> DisplayedElement
            -> Position -> Position -> Dimension -> Dimension
            -> SindreX11M ()
-drawWinBox d text subs x y cw ch = do
+drawWinBox d e x y cw ch = do
   io $ bg d fillRectangle x y cw ch
   io $ fg d drawRectangle x y cw ch
-  let theight  = Xft.height $ drawerFont d
+  let subs = displayedSubnames e
+      theight  = Xft.height $ drawerFont d
       sheights = map (const $ Xft.height $ drawerFont d) subs
-      room     = ch-2*cellPadding-fi theight
-      (sheight, subs') =
-        fromMaybe (0, []) $
-        find ((<=room) . fst) $
-        reverse $ zip (map sum $ inits sheights) (inits subs)
+      sheight = length subs * fi theight
       x' = x+cellPadding
       y' = y+(fi ch-fi sheight-fi theight) `div` 2
-      ys = map (+(y'+theight)) $ scanl (+) 0 $ map fi sheights
-      putline voff s =
-        stopText (drawerFont d) (cw-(2*cellPadding)) s >>=
-          drawText (drawerFgColor d) (drawerFont d) x' voff theight
-  _ <- putline y' text
-  zipWithM_ putline ys subs'
-
-stopText :: Xft.Font -> Dimension -> String -> SindreX11M String
-stopText f mw =
-  shrinkWhile (reverse . inits)
-  (\n -> (> fi mw) <$> fst <$> textExtents f n)
-
-shrinkWhile :: Monad m => ([a] -> [[a]])
-            -> ([a] -> m Bool)
-            -> [a] -> m [a]
-shrinkWhile sh p x = sw $ sh x
-    where sw [n] = return n
-          sw [] = return []
-          sw (n:ns) = do cond <- p n
-                         if cond
-                            then sw ns
-                            else return n
+      ys = map (+(y'+theight)) $ scanl (+) 0 sheights
+      putline voff =
+        drawText (drawerFgColor d) (drawerFont d) x' voff theight
+  _ <- putline y' $ displayedName e
+  zipWithM_ putline ys subs
 
 mkGrid :: Constructor SindreX11M
 mkGrid r [] = do
