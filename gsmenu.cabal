@@ -14,7 +14,7 @@ build-type:         Custom
 
 executable gsmenu
     build-depends: X11>=1.5.0.0 && < 1.6, mtl, base==4.*,
-                   containers, parsec==3.*, sindre, text, permute
+                   containers, parsec==3.*, sindre>=0.2, text, permute
 
     main-is:            Main.hs
 
