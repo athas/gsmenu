@@ -36,6 +36,7 @@ import Control.Monad.State.Lazy
 import Data.Either
 import Data.List
 import Data.Maybe
+import Data.Ord (comparing)
 import Data.Traversable (traverse)
 import Data.Word (Word8)
 import qualified Data.Map as M
@@ -195,6 +196,7 @@ shrinkWhile sh p x = sw $ sh x
 recomputeMap :: Drawer -> ObjectM Grid SindreX11M ()
 recomputeMap d = do
   Rectangle _ _ rwidth rheight <- gets gridRect
+  oldpos <- gets $ position . gridElementMap
   let restriction ss cs = (ss/cs-1)/2 :: Double
       restrictX = floor $ restriction (fi rwidth) cellWidth
       restrictY = floor $ restriction (fi rheight) cellHeight
@@ -202,15 +204,25 @@ recomputeMap d = do
       buildGrid = traverse (back . gridBox d) . M.fromList . zip coords
   oldsel <- gets selection
   elmap <- buildGrid =<< gets gridSelElems
-  modify $ \s -> s { gridElementMap = gridFromMap elmap (0,0) }
+  let grid = gridFromMap elmap (0,0)
+  modify $ \s -> s { gridElementMap =
+                       grid { position = bestpos oldpos $
+                                         map fst $ gridToList grid }
+                   }
   newsel <- gets selection
   when (oldsel /= newsel) $
     changed "selected" oldsel newsel
+    where bestpos _ [] = (0,0)
+          bestpos oldpos l  = minimumBy (closeTo oldpos) l
+          closeTo orig p1 p2 | dist orig p1 > dist orig p2 = GT
+                             | dist orig p2 > dist orig p1 = LT
+                             | otherwise = comparing (dist (0,0)) p1 p2
+          dist (x1,y1) (x2,y2) = abs (x1-x2) + abs (y1-y2)
 
 needRecompute :: ObjectM Grid SindreX11M ()
-needRecompute = do modify $ \s -> s { gridElementMap = emptyGrid
-                                    , gridRect = Rectangle 0 0 0 0 }
-                   fullRedraw
+needRecompute = do
+  modify $ \s -> s { gridRect = Rectangle 0 0 0 0 }
+  fullRedraw
 
 updateRect :: Rectangle -> Drawer -> ObjectM Grid SindreX11M ()
 updateRect r1 d = do r2 <- gets gridRect
