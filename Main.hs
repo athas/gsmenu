@@ -61,7 +61,7 @@ main = case parseSindre emptyProgram "builtin" prog of
                        , "<Left> || <C-b> { grid.west(); next }"
                        , "<Up> || <C-p> { grid.north(); next }"
                        , "<Down> || <C-n> { grid.south(); next }"
-                       , "<Return> { foo = grid.selected; print foo[\"value\"]; exit }"
+                       , "<Return> { if (grid.selected) { print grid.selected [\"value\"] }; exit }"
                        , "<C-s> { grid.next(); next }"
                        , "<C-r> { grid.prev(); next }"
                        , "BEGIN { foo = grid.selected; if (foo) { label.label = foo[\"name\"] } }"
