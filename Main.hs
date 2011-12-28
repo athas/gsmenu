@@ -83,9 +83,10 @@ data DisplayedElement = DisplayedElement { displayedName :: String
                                          , displayedElement :: Element
                                          } deriving (Show)
 
-match :: T.Text -> Element -> Bool
-match f e = (T.toCaseFold f `T.isInfixOf`) `any`
-            map T.toCaseFold (elementName e : elementSubnames e ++ elementTags e)
+matchEl :: T.Text -> Element -> Bool
+matchEl pat e = matchEl' `all` T.words (T.toCaseFold pat)
+  where es = map T.toCaseFold (elementName e : elementSubnames e ++ elementTags e)
+        matchEl' w = (isJust . match w) `any` es
 
 type TwoDPos = (Integer, Integer)
 type TwoDElement = (TwoDPos, DisplayedElement)
@@ -238,7 +239,7 @@ methInsert vs = case partitionEithers $ parser vs of
                     modify $ \s ->
                       s { gridElems = gridElems s ++ els'
                         , gridSelElems = gridSelElems s ++
-                          filter (match $ gridFilter s) els' }
+                          filter (matchEl $ gridFilter s) els' }
                     needRecompute
   where parser = map parseElement . T.lines
 
@@ -261,7 +262,7 @@ methClear = modify $ \s -> s { gridElementMap = emptyGrid
 
 methFilter :: T.Text -> ObjectM Grid SindreX11M ()
 methFilter f = do changeFields [("selected", unmold . selection)] $ \s ->
-                      return s { gridSelElems = filter (match f) $ gridElems s }
+                      return s { gridSelElems = filter (matchEl f) $ gridElems s }
                   needRecompute
 
 methNext :: ObjectM Grid SindreX11M ()
