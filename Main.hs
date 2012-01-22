@@ -64,7 +64,7 @@ main = case parseSindre emptyProgram "builtin" prog of
                        , "<Return> { if (grid.selected) { print grid.selected [\"value\"] }; exit }"
                        , "<C-s> { grid.next(); next }"
                        , "<C-r> { grid.prev(); next }"
-                       , "BEGIN { foo = grid.selected; if (foo) { label.label = foo[\"name\"] } }"
+                       , "BEGIN { if (grid.selected) { label.label = grid.selected[\"name\"] } }"
                        , "grid.selected->changed(from, to) { if (to) { label.label = to[\"name\"] } }" ]
         classMap' = M.insert "Grid" mkGrid classMap
 
@@ -77,6 +77,15 @@ data Element = Element { elementName     :: T.Text
 
 instance Show Element where
   show = show . elementName
+
+instance Mold Element where
+  mold = const Nothing
+  unmold e = Dict $ M.fromList
+             [ (unmold "name", unmold $ elementName e)
+             , (unmold "subnames", dict $ elementSubnames e)
+             , (unmold "tags", dict $ elementTags e)
+             , (unmold "value", unmold $ elementValue e)]
+    where dict = Dict . M.fromList . zip (map Number [0..]) . map unmold
 
 data DisplayedElement = DisplayedElement { displayedName :: String
                                          , displayedSubnames :: [String]
@@ -150,16 +159,9 @@ data Grid = Grid { gridElems      :: [Element]
                  , gridRect       :: Rectangle
                  }
 
-selection :: Grid -> Value
-selection g = maybe falsity (asDict . displayedElement)
-              $ M.lookup (position grid) $ elements grid
+selection :: Grid -> Maybe Element
+selection g = liftM displayedElement $ M.lookup (position grid) $ elements grid
   where grid = gridElementMap g
-        asDict e = Dict $ M.fromList
-                   [ (unmold "name", unmold $ elementName e)
-                   , (unmold "subnames", dict $ elementSubnames e)
-                   , (unmold "tags", dict $ elementTags e)
-                   , (unmold "value", unmold $ elementValue e)]
-        dict = Dict . M.fromList . zip (map Number [0..]) . map unmold
 
 gridBox :: Drawer -> Element -> SindreX11M DisplayedElement
 gridBox d e@Element { elementName = text, elementSubnames = subs } = do
@@ -194,8 +196,8 @@ shrinkWhile sh p x = sw $ sh x
                             then sw ns
                             else return n
 
-recomputeMap :: Drawer -> ObjectM Grid SindreX11M ()
-recomputeMap d = do
+recomputeMap :: X11Field Grid (Maybe Element) -> Drawer -> ObjectM Grid SindreX11M ()
+recomputeMap sel d = changingField sel $ do
   Rectangle _ _ rwidth rheight <- gets gridRect
   oldpos <- gets $ position . gridElementMap
   let restriction ss cs = (ss/cs-1)/2 :: Double
@@ -203,33 +205,29 @@ recomputeMap d = do
       restrictY = floor $ restriction (fi rheight) cellHeight
       coords = diamondRestrict restrictX restrictY
       buildGrid = traverse (back . gridBox d) . M.fromList . zip coords
-  oldsel <- gets selection
   elmap <- buildGrid =<< gets gridSelElems
   let grid = gridFromMap elmap (0,0)
   modify $ \s -> s { gridElementMap =
                        grid { position = bestpos oldpos $
                                          map fst $ gridToList grid }
                    }
-  newsel <- gets selection
-  when (oldsel /= newsel) $
-    changed "selected" oldsel newsel
-    where bestpos _ [] = (0,0)
-          bestpos oldpos l  = minimumBy (closeTo oldpos) l
-          closeTo orig p1 p2 | dist orig p1 > dist orig p2 = GT
-                             | dist orig p2 > dist orig p1 = LT
-                             | otherwise = comparing (dist (0,0)) p1 p2
-          dist (x1,y1) (x2,y2) = abs (x1-x2) + abs (y1-y2)
+  where bestpos _ [] = (0,0)
+        bestpos oldpos l  = minimumBy (closeTo oldpos) l
+        closeTo orig p1 p2 | dist orig p1 > dist orig p2 = GT
+                           | dist orig p2 > dist orig p1 = LT
+                           | otherwise = comparing (dist (0,0)) p1 p2
+        dist (x1,y1) (x2,y2) = abs (x1-x2) + abs (y1-y2)
 
 needRecompute :: ObjectM Grid SindreX11M ()
 needRecompute = do
   modify $ \s -> s { gridRect = Rectangle 0 0 0 0 }
   fullRedraw
 
-updateRect :: Rectangle -> Drawer -> ObjectM Grid SindreX11M ()
-updateRect r1 d = do r2 <- gets gridRect
-                     unless (r1 == r2) $ do
-                       modify $ \s -> s { gridRect = r1 }
-                       recomputeMap d
+updateRect :: X11Field Grid (Maybe Element) -> Rectangle -> Drawer -> ObjectM Grid SindreX11M ()
+updateRect sel r1 d = do r2 <- gets gridRect
+                         unless (r1 == r2) $ do
+                           modify $ \s -> s { gridRect = r1 }
+                           recomputeMap sel d
 
 methInsert :: T.Text -> ObjectM Grid SindreX11M ()
 methInsert vs = case partitionEithers $ parser vs of
@@ -260,21 +258,20 @@ methClear = modify $ \s -> s { gridElementMap = emptyGrid
                              , gridElems      = []
                              , gridSelElems   = [] }
 
-methFilter :: T.Text -> ObjectM Grid SindreX11M ()
-methFilter f = do changeFields [("selected", unmold . selection)] $ \s ->
-                      return s { gridSelElems = filter (matchEl f) $ gridElems s }
-                  needRecompute
+methFilter :: X11Field Grid (Maybe Element) ->  T.Text -> ObjectM Grid SindreX11M ()
+methFilter sel f = changingField sel $ do
+  modify $ \s -> s { gridSelElems = filter (matchEl f) $ gridElems s }
+  needRecompute
 
-methNext :: ObjectM Grid SindreX11M ()
-methPrev :: ObjectM Grid SindreX11M ()
+methNext :: X11Field Grid (Maybe Element) -> ObjectM Grid SindreX11M ()
+methPrev :: X11Field Grid (Maybe Element) -> ObjectM Grid SindreX11M ()
 (methNext, methPrev) = (circle next, circle prev)
-    where circle f = do changeFields [("selected", unmold . selection)] $ \s ->
-                            case gridElementMap s of
-                              elems@ElementGrid{position=(x,y)} ->
-                                return s { gridElementMap =
-                                             fromMaybe elems $ f x y elems
-                                         }
-                        redraw
+    where circle f sel = changingField sel $ do
+            elems@ElementGrid{position=(x,y)} <- gets gridElementMap
+            modify $ \s -> s { gridElementMap =
+                                 fromMaybe elems $ f x y elems
+                             }
+            redraw
           next (-1) y | y >= 0 = south <=< south <=< east
           next x y = case (compare x 0, compare y 0) of
                        (EQ, EQ) -> south
@@ -296,45 +293,56 @@ methPrev :: ObjectM Grid SindreX11M ()
                        (GT, LT) -> east <=< south
                        (GT, _) -> south <=< west
 
-move :: (ElementGrid -> Maybe ElementGrid) -> ObjectM Grid SindreX11M ()
-move d = do changeFields [("selected", unmold . selection)] $ \s ->
-              return s { gridElementMap = fromMaybe (gridElementMap s)
-                                          $ d $ gridElementMap s
-                       }
-            redraw
+move :: X11Field Grid (Maybe Element)
+     -> (ElementGrid -> Maybe ElementGrid) -> ObjectM Grid SindreX11M ()
+move sel d = changingField sel $ do
+  modify $ \s -> s { gridElementMap = fromMaybe (gridElementMap s)
+                                      $ d $ gridElementMap s
+                   }
+  redraw
 
-instance Object SindreX11M Grid where
-    fieldSetI _ _ = return $ Number 0
-    fieldGetI "selected" = selection <$> get
-    fieldGetI "elements" = Dict <$> M.fromList <$>
-                           zip (map Number [1..]) <$>
-                           map (unmold . elementValue) <$> gridSelElems <$> get
-    fieldGetI _ = return $ Number 0
-    callMethodI "insert" = function methInsert
-    callMethodI "removeValue" = function methRemoveByValue
-    callMethodI "removeName" = function methRemoveByName
-    callMethodI "clear"  = function methClear
-    callMethodI "filter" = function methFilter
-    callMethodI "next" = function methNext
-    callMethodI "prev" = function methPrev
-    callMethodI "north" = function $ move north
-    callMethodI "south" = function $ move south
-    callMethodI "west" = function $ move west
-    callMethodI "east" = function $ move east
-    callMethodI m = fail $ "Unknown method '" ++ m ++ "'"
+mkGrid :: Constructor SindreX11M
+mkGrid wn [] = do
+  visual <- visualOpts wn
+  let grid = Grid { gridElems      = []
+                  , gridSelElems   = []
+                  , gridFilter     = T.empty
+                  , gridElementMap = emptyGrid
+                  , gridVisual     = visual
+                  , gridRect       = Rectangle 0 0 0 0
+                  }
+  return $ newWidget grid methods [field sel, field elms]
+           (const $ return ()) composeI (drawI visual)
+    where methods = M.fromList
+                    [ ("insert", function methInsert)
+                    , ("removeValue", function methRemoveByValue)
+                    , ("removeName", function methRemoveByName)
+                    , ("clear", function methClear)
+                    , ("filter", function $ methFilter sel)
+                    , ("next", function $ methNext sel)
+                    , ("prev", function $ methPrev sel)
+                    , ("north", function $ move sel north)
+                    , ("south", function $ move sel south)
+                    , ("west", function $ move sel west)
+                    , ("east", function $ move sel east)]
+          sel = ReadOnlyField "selected" $ gets selection
+          elms = ReadOnlyField "elements" $
+                 Dict <$> M.fromList <$>
+                 zip (map Number [1..]) <$>
+                 map (unmold . elementValue) <$> gets gridSelElems
+          composeI = return (Unlimited, Unlimited)
+          drawI visual = drawing visual $ \r d fd -> do
+            updateRect sel r d
+            elems <- gets gridElementMap
+            let update (p,e) x y cw ch = do
+                  d' <- io $ (`setBgColor` elementBg (displayedElement e)) <=<
+                             (`setFgColor` elementFg (displayedElement e)) $ d
+                  let drawbox | p == position elems = drawWinBox fd
+                              | otherwise = drawWinBox d'
+                  drawbox e x y cw ch
+            back $ updatingBoxes update r elems
+mkGrid  _ _ = error "Grids do not have children"
 
-instance Widget SindreX11M Grid where
-    composeI = return (Unlimited, Unlimited)
-    drawI = drawing gridVisual $ \r d fd -> do
-      updateRect r d
-      elems <- gets gridElementMap
-      let update (p,e) x y cw ch = do
-            d' <- io $ (`setBgColor` elementBg (displayedElement e)) <=<
-                       (`setFgColor` elementFg (displayedElement e)) $ d
-            let drawbox | p == position elems = drawWinBox fd
-                        | otherwise = drawWinBox d'
-            drawbox e x y cw ch
-      back $ updatingBoxes update r elems
 
 updatingBoxes :: (TwoDElement
                   -> Position -> Position
@@ -370,19 +378,6 @@ drawWinBox d e x y cw ch = do
         drawText (drawerFgColor d) (drawerFont d) x' voff theight
   _ <- putline y' $ displayedName e
   zipWithM_ putline ys subs
-
-mkGrid :: Constructor SindreX11M
-mkGrid r [] = do
-  visual <- visualOpts r
-  return $ NewWidget
-    Grid { gridElems      = []
-         , gridSelElems   = []
-         , gridFilter     = T.empty
-         , gridElementMap = emptyGrid
-         , gridVisual     = visual
-         , gridRect       = Rectangle 0 0 0 0
-         }
-mkGrid  _ _ = error "Grids do not have children"
 
 parseElement :: T.Text -> Either String (SindreX11M Element)
 parseElement = parseKV textelement
