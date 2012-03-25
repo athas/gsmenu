@@ -100,14 +100,14 @@ matchEl pat e = matchEl' `all` T.words (T.toCaseFold pat)
 type TwoDPos = (Integer, Integer)
 type TwoDElement = (TwoDPos, DisplayedElement)
 
-diamondLayer :: (Enum b', Num b') => b' -> [(b', b')]
+diamondLayer :: Integral a => a -> [(a, a)]
 diamondLayer 0 = [(0,0)]
 diamondLayer n = concat [ zip [0..]      [n,n-1..1]
                         , zip [n,n-1..1] [0,-1..]
                         , zip [0,-1..]   [-n..(-1)]
                         , zip [-n..(-1)] [0,1..] ]
 
-diamond :: (Enum a, Num a) => [(a, a)]
+diamond :: Integral a => [(a, a)]
 diamond = concatMap diamondLayer [0..]
 
 diamondRestrict :: Integer -> Integer -> [TwoDPos]
