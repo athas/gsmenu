@@ -28,7 +28,6 @@ import Graphics.X11.Xlib hiding (refreshKeyboardMapping, Rectangle, textWidth, a
                                  textExtents)
 import qualified Graphics.X11.Xft as Xft
 
-import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Lazy
@@ -37,7 +36,6 @@ import Data.Either
 import Data.List
 import Data.Maybe
 import Data.Ord (comparing)
-import Data.Traversable (traverse)
 import Data.Word (Word8)
 import qualified Data.Map as M
 import qualified Data.Text as T
